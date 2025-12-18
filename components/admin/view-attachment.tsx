@@ -4,23 +4,25 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getSignedAttachmentUrl } from "@/app/actions/storage";
 import { toast } from "sonner";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Image as ImageIcon } from "lucide-react";
 
 interface ViewAttachmentProps {
-  attachmentPath: string | null;
+  attachmentPaths: string[] | null;
 }
 
-export default function ViewAttachment({ attachmentPath }: ViewAttachmentProps) {
-  const [isLoading, setIsLoading] = useState(false);
+export default function ViewAttachment({
+  attachmentPaths,
+}: ViewAttachmentProps) {
+  const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
 
-  if (!attachmentPath) {
+  if (!attachmentPaths || attachmentPaths.length === 0) {
     return <span className="text-muted-foreground text-sm">-</span>;
   }
 
-  const handleView = async () => {
-    setIsLoading(true);
+  const handleView = async (path: string, index: number) => {
+    setLoadingIndex(index);
     try {
-      const result = await getSignedAttachmentUrl(attachmentPath);
+      const result = await getSignedAttachmentUrl(path);
 
       if (result.ok) {
         // Abrir em nova aba
@@ -36,21 +38,40 @@ export default function ViewAttachment({ attachmentPath }: ViewAttachmentProps) 
         description: "Não foi possível abrir o anexo.",
       });
     } finally {
-      setIsLoading(false);
+      setLoadingIndex(null);
     }
   };
 
+  if (attachmentPaths.length === 1) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => handleView(attachmentPaths[0], 0)}
+        disabled={loadingIndex === 0}
+        className="h-8"
+      >
+        <ExternalLink className="h-4 w-4 mr-1" />
+        {loadingIndex === 0 ? "Abrindo..." : "Abrir"}
+      </Button>
+    );
+  }
+
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={handleView}
-      disabled={isLoading}
-      className="h-8"
-    >
-      <ExternalLink className="h-4 w-4 mr-1" />
-      {isLoading ? "Abrindo..." : "Abrir"}
-    </Button>
+    <div className="flex flex-col gap-1">
+      {attachmentPaths.map((path, index) => (
+        <Button
+          key={index}
+          variant="ghost"
+          size="sm"
+          onClick={() => handleView(path, index)}
+          disabled={loadingIndex === index}
+          className="h-7 justify-start text-xs"
+        >
+          <ImageIcon className="h-3 w-3 mr-1" />
+          {loadingIndex === index ? "Abrindo..." : `Imagem ${index + 1}`}
+        </Button>
+      ))}
+    </div>
   );
 }
-

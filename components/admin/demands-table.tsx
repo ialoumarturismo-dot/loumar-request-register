@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import StatusSelect from "./status-select";
 import ViewAttachment from "./view-attachment";
+import ViewReferenceLinks from "./view-reference-links";
 import type { Database } from "@/types/database";
 
 type Demand = Database["public"]["Tables"]["demands"]["Row"];
@@ -50,6 +51,7 @@ export default function DemandsTable({ demands }: DemandsTableProps) {
             <TableHead>Impacto</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Anexo</TableHead>
+            <TableHead>Links</TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
@@ -68,8 +70,8 @@ export default function DemandsTable({ demands }: DemandsTableProps) {
                     demand.impact_level === "Bloqueante"
                       ? "destructive"
                       : demand.impact_level === "Alto"
-                        ? "default"
-                        : "secondary"
+                      ? "default"
+                      : "secondary"
                   }
                 >
                   {demand.impact_level}
@@ -81,10 +83,16 @@ export default function DemandsTable({ demands }: DemandsTableProps) {
                 </Badge>
               </TableCell>
               <TableCell>
-                <ViewAttachment attachmentPath={demand.attachment_url} />
+                <ViewAttachment attachmentPaths={demand.attachment_urls} />
+              </TableCell>
+              <TableCell>
+                <ViewReferenceLinks links={demand.reference_links} />
               </TableCell>
               <TableCell className="text-right">
-                <StatusSelect demandId={demand.id} currentStatus={demand.status} />
+                <StatusSelect
+                  demandId={demand.id}
+                  currentStatus={demand.status}
+                />
               </TableCell>
             </TableRow>
           ))}

@@ -9,6 +9,35 @@ import type { Database } from "@/types/database";
 
 type Demand = Database["public"]["Tables"]["demands"]["Row"];
 
+// Função para normalizar URLs adicionando https:// se necessário
+const normalizeUrl = (url: string): string => {
+  if (!url || url.trim() === "") return url;
+
+  const trimmed = url.trim();
+
+  // Se já tem protocolo (http://, https://, ftp://, etc.), retorna como está
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Remove barras iniciais se houver
+  const cleaned = trimmed.replace(/^\/+/, "");
+
+  // Se parece ser uma URL válida (contém ponto e caracteres válidos)
+  // Padrão: começa com letra/número, pode ter hífens/pontos, tem domínio válido
+  if (/^[a-zA-Z0-9][a-zA-Z0-9\-.]*\.[a-zA-Z]{2,}/.test(cleaned)) {
+    return `https://${cleaned}`;
+  }
+
+  // Se começa com www., adiciona https://
+  if (/^www\./i.test(cleaned)) {
+    return `https://${cleaned}`;
+  }
+
+  // Se não parece ser URL, retorna como está (será validado depois)
+  return trimmed;
+};
+
 // Schema de validação para criação de demanda
 const createDemandSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -21,6 +50,15 @@ const createDemandSchema = z.object({
   description: z
     .string()
     .min(10, "Descrição deve ter pelo menos 10 caracteres"),
+  reference_links: z
+    .array(
+      z
+        .string()
+        .transform((val) => normalizeUrl(val))
+        .pipe(z.string().url())
+    )
+    .optional()
+    .default([]),
 });
 
 type CreateDemandInput = z.infer<typeof createDemandSchema>;
@@ -34,7 +72,27 @@ export async function createDemand(formData: FormData) {
     const system_area = formData.get("system_area") as string;
     const impact_level = formData.get("impact_level") as string;
     const description = formData.get("description") as string;
-    const attachment = formData.get("attachment") as File | null;
+    const referenceLinksJson = formData.get("reference_links") as string | null;
+
+    // Extrair múltiplos arquivos
+    const attachments: File[] = [];
+    const attachmentsData = formData.getAll("attachments");
+    attachmentsData.forEach((item) => {
+      if (item instanceof File && item.size > 0) {
+        attachments.push(item);
+      }
+    });
+
+    // Processar links de referência
+    let referenceLinks: string[] = [];
+    if (referenceLinksJson) {
+      try {
+        referenceLinks = JSON.parse(referenceLinksJson);
+      } catch (e) {
+        console.error("Error parsing reference_links:", e);
+        // Continuar com array vazio se houver erro
+      }
+    }
 
     // Validar campos obrigatórios
     const validation = createDemandSchema.safeParse({
@@ -44,6 +102,7 @@ export async function createDemand(formData: FormData) {
       system_area,
       impact_level,
       description,
+      reference_links: referenceLinks,
     });
 
     if (!validation.success) {
@@ -58,73 +117,76 @@ export async function createDemand(formData: FormData) {
     // Gerar ID da demanda antes do upload (para organizar arquivos)
     const demandId = randomUUID();
 
-    let attachmentUrl: string | null = null;
+    const attachmentUrls: string[] = [];
 
-    // Processar upload se houver arquivo
-    if (attachment && attachment.size > 0) {
-      try {
-        // Validar tamanho (máx 5MB)
-        const MAX_SIZE = 5 * 1024 * 1024; // 5MB
-        if (attachment.size > MAX_SIZE) {
+    // Processar upload de múltiplos arquivos
+    if (attachments.length > 0) {
+      const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+      const allowedTypes = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+      ];
+
+      const supabase = createAdminClient();
+
+      for (const attachment of attachments) {
+        try {
+          // Validar tamanho
+          if (attachment.size > MAX_SIZE) {
+            return {
+              ok: false,
+              error: `${attachment.name}: Arquivo muito grande. Tamanho máximo: 5MB`,
+            };
+          }
+
+          // Validar tipo de arquivo
+          if (!allowedTypes.includes(attachment.type)) {
+            return {
+              ok: false,
+              error: `${attachment.name}: Tipo não permitido. Use apenas imagens (JPG, PNG, GIF, WEBP)`,
+            };
+          }
+
+          // Sanitizar nome do arquivo
+          const sanitizedFilename = attachment.name
+            .replace(/[^a-zA-Z0-9.-]/g, "_")
+            .toLowerCase();
+
+          // Definir path no storage: demand-uploads/{demandId}/{filename}
+          const storagePath = `${demandId}/${sanitizedFilename}`;
+
+          // Converter File para ArrayBuffer
+          const arrayBuffer = await attachment.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+
+          // Fazer upload
+          const { error: uploadError } = await supabase.storage
+            .from("demand-uploads")
+            .upload(storagePath, buffer, {
+              contentType: attachment.type,
+              upsert: false,
+            });
+
+          if (uploadError) {
+            console.error("Upload error:", uploadError);
+            return {
+              ok: false,
+              error: `Erro ao fazer upload de ${attachment.name}: ${uploadError.message}`,
+            };
+          }
+
+          // Adicionar path ao array
+          attachmentUrls.push(storagePath);
+        } catch (uploadErr) {
+          console.error("Upload exception:", uploadErr);
           return {
             ok: false,
-            error: "Arquivo muito grande. Tamanho máximo: 5MB",
+            error: `Erro ao processar ${attachment.name}. Tente novamente.`,
           };
         }
-
-        // Validar tipo de arquivo (apenas imagens)
-        const allowedTypes = [
-          "image/jpeg",
-          "image/jpg",
-          "image/png",
-          "image/gif",
-          "image/webp",
-        ];
-        if (!allowedTypes.includes(attachment.type)) {
-          return {
-            ok: false,
-            error:
-              "Tipo de arquivo não permitido. Use apenas imagens (JPG, PNG, GIF, WEBP)",
-          };
-        }
-
-        // Sanitizar nome do arquivo
-        const sanitizedFilename = attachment.name
-          .replace(/[^a-zA-Z0-9.-]/g, "_")
-          .toLowerCase();
-
-        // Definir path no storage: demand-uploads/{demandId}/{filename}
-        const storagePath = `${demandId}/${sanitizedFilename}`;
-
-        // Converter File para ArrayBuffer
-        const arrayBuffer = await attachment.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        // Criar cliente admin e fazer upload
-        const supabase = createAdminClient();
-        const { error: uploadError } = await supabase.storage
-          .from("demand-uploads")
-          .upload(storagePath, buffer, {
-            contentType: attachment.type,
-            upsert: false,
-          });
-
-        if (uploadError) {
-          console.error("Upload error:", uploadError);
-          return {
-            ok: false,
-            error: `Erro ao fazer upload do arquivo: ${uploadError.message}`,
-          };
-        }
-
-        // Salvar apenas o path, não a URL completa
-        attachmentUrl = storagePath;
-      } catch (uploadErr) {
-        console.error("Upload exception:", uploadErr);
-        return {
-          ok: false,
-          error: "Erro ao processar arquivo. Tente novamente.",
-        };
       }
     }
 
@@ -141,7 +203,8 @@ export async function createDemand(formData: FormData) {
           system_area: validatedData.system_area,
           impact_level: validatedData.impact_level,
           description: validatedData.description,
-          attachment_url: attachmentUrl,
+          attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : [],
+          reference_links: validatedData.reference_links || [],
           status: "Recebido",
         })
         .select()
