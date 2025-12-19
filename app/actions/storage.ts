@@ -63,8 +63,7 @@ export async function getSignedAttachmentUrl(
       // Verificar se o erro é "not found"
       if (
         error.message?.includes("not found") ||
-        error.message?.includes("Object not found") ||
-        error.statusCode === "404"
+        error.message?.includes("Object not found")
       ) {
         return {
           ok: false,
