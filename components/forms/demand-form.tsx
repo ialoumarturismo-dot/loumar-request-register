@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState, useTransition, useEffect } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,11 +39,13 @@ import {
 // Ajustado para suporte apenas aos departamentos válidos [B2B, B2C, Concierge, etc.]
 const DEPARTMENTS = [
   "B2B",
-  "B2C",
+  "Call Center",
+  "Balcão (PDV)",
+  "Suporte",
   "Concierge",
   "Financeiro",
   "Marketing",
-  "Produto",
+  "Operacional",
   "Tech",
   "Outro",
 ];
@@ -426,7 +429,7 @@ export default function DemandForm() {
             disabled={isPending}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Selecione o setor" />
+              <SelectValue placeholder="Informe seu setor" />
             </SelectTrigger>
             <SelectContent>
               {DEPARTMENTS.map((dep) => (
@@ -636,10 +639,13 @@ export default function DemandForm() {
                       <div className="flex items-start gap-2">
                         <div className="relative flex-shrink-0">
                           {previewUrl ? (
-                            <img
+                            <Image
                               src={previewUrl}
                               alt={file.name}
+                              width={64}
+                              height={64}
                               className="w-16 h-16 object-cover rounded"
+                              unoptimized
                             />
                           ) : (
                             <div className="w-16 h-16 bg-muted rounded flex items-center justify-center">
