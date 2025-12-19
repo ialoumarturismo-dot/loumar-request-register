@@ -193,6 +193,13 @@ export async function createDemand(formData: FormData) {
     // Inserir demanda no banco
     try {
       const supabase = createAdminClient();
+      // Calcular prioridade inicial
+      const priorityScore = calculatePriorityScore(
+        validatedData.impact_level,
+        validatedData.demand_type,
+        new Date()
+      );
+
       const { data, error } = await supabase
         .from("demands")
         .insert({
@@ -206,6 +213,8 @@ export async function createDemand(formData: FormData) {
           attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : [],
           reference_links: validatedData.reference_links || [],
           status: "Recebido",
+          admin_status: "Em análise",
+          priority_score: priorityScore,
         })
         .select()
         .single();
@@ -288,6 +297,46 @@ export async function getDemands(): Promise<
 }
 
 /**
+ * Função para calcular score de prioridade (0-100)
+ * Função auxiliar interna - não é uma server action
+ */
+function calculatePriorityScore(
+  impactLevel: string,
+  demandType: string,
+  createdAt: Date
+): number {
+  // Baseado no impacto (40% do score)
+  const impactScores: Record<string, number> = {
+    Bloqueante: 100,
+    Alto: 75,
+    Médio: 50,
+    Baixo: 25,
+  };
+  const impactScore = impactScores[impactLevel] || 50;
+
+  // Baseado no tipo (20% do score)
+  const typeScores: Record<string, number> = {
+    Bug: 20,
+    Melhoria: 10,
+    Ideia: 5,
+    Ajuste: 15,
+  };
+  const typeScore = typeScores[demandType] || 10;
+
+  // Baseado na idade (20% do score) - demandas mais antigas ganham prioridade
+  const daysSinceCreation =
+    (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+  const ageScore = Math.min(20, Math.floor(daysSinceCreation / 7) * 5); // +5 pontos por semana, máximo 20
+
+  // Cálculo final: (impacto × 0.4) + (tipo × 0.2) + (idade × 0.2) + base (20)
+  const finalScore = Math.round(
+    impactScore * 0.4 + typeScore * 0.2 + ageScore * 0.2 + 20
+  );
+
+  return Math.min(100, Math.max(0, finalScore));
+}
+
+/**
  * Server Action: Atualizar status de uma demanda
  */
 const updateStatusSchema = z.object({
@@ -348,6 +397,352 @@ export async function updateDemandStatus(
     return {
       ok: false,
       error: "Erro inesperado ao atualizar status.",
+    };
+  }
+}
+
+/**
+ * Server Action: Atualizar admin_status de uma demanda
+ */
+const updateAdminStatusSchema = z.object({
+  admin_status: z.enum(["Em análise", "Acatada", "Resolvida", "Descartada"]),
+});
+
+export async function updateAdminStatus(
+  demandId: string,
+  adminStatus: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Verificar se usuário está autenticado
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        ok: false,
+        error: "Não autenticado",
+      };
+    }
+
+    // Validar admin_status
+    const validation = updateAdminStatusSchema.safeParse({
+      admin_status: adminStatus,
+    });
+    if (!validation.success) {
+      return {
+        ok: false,
+        error:
+          validation.error.issues[0]?.message ||
+          "Status administrativo inválido",
+      };
+    }
+
+    // Preparar update
+    const updateData: {
+      admin_status: string;
+      resolved_at?: string;
+    } = {
+      admin_status: validation.data.admin_status,
+    };
+
+    // Se foi resolvida, adicionar timestamp
+    if (validation.data.admin_status === "Resolvida") {
+      updateData.resolved_at = new Date().toISOString();
+    }
+
+    // Atualizar admin_status
+    const { error: updateError } = await supabase
+      .from("demands")
+      .update(updateData)
+      .eq("id", demandId);
+
+    if (updateError) {
+      console.error("Update admin status error:", updateError);
+      return {
+        ok: false,
+        error: `Erro ao atualizar status administrativo: ${updateError.message}`,
+      };
+    }
+
+    // Revalidar página do admin
+    revalidatePath("/admin");
+
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao atualizar status administrativo.",
+    };
+  }
+}
+
+/**
+ * Server Action: Atualizar admin_notes de uma demanda
+ */
+export async function updateAdminNotes(
+  demandId: string,
+  adminNotes: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Verificar se usuário está autenticado
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        ok: false,
+        error: "Não autenticado",
+      };
+    }
+
+    // Atualizar admin_notes (permite string vazia)
+    const { error: updateError } = await supabase
+      .from("demands")
+      .update({ admin_notes: adminNotes || null })
+      .eq("id", demandId);
+
+    if (updateError) {
+      console.error("Update admin notes error:", updateError);
+      return {
+        ok: false,
+        error: `Erro ao atualizar notas: ${updateError.message}`,
+      };
+    }
+
+    // Revalidar página do admin
+    revalidatePath("/admin");
+
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao atualizar notas.",
+    };
+  }
+}
+
+/**
+ * Server Action: Atualizar assigned_to de uma demanda
+ */
+export async function updateAssignedTo(
+  demandId: string,
+  assignedTo: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Verificar se usuário está autenticado
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        ok: false,
+        error: "Não autenticado",
+      };
+    }
+
+    // Atualizar assigned_to
+    const { error: updateError } = await supabase
+      .from("demands")
+      .update({ assigned_to: assignedTo || null })
+      .eq("id", demandId);
+
+    if (updateError) {
+      console.error("Update assigned_to error:", updateError);
+      return {
+        ok: false,
+        error: `Erro ao atualizar responsável: ${updateError.message}`,
+      };
+    }
+
+    // Revalidar página do admin
+    revalidatePath("/admin");
+
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao atualizar responsável.",
+    };
+  }
+}
+
+/**
+ * Server Action: Atualizar priority de uma demanda
+ */
+const updatePrioritySchema = z.object({
+  priority: z.enum(["Urgente", "Importante", "Necessário", "Interessante"]),
+});
+
+export async function updatePriority(
+  demandId: string,
+  priority: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Verificar se usuário está autenticado
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        ok: false,
+        error: "Não autenticado",
+      };
+    }
+
+    // Validar priority
+    const validation = updatePrioritySchema.safeParse({
+      priority: priority,
+    });
+    if (!validation.success) {
+      return {
+        ok: false,
+        error: validation.error.issues[0]?.message || "Prioridade inválida",
+      };
+    }
+
+    // Atualizar priority
+    const { error: updateError } = await supabase
+      .from("demands")
+      .update({ priority: validation.data.priority })
+      .eq("id", demandId);
+
+    if (updateError) {
+      console.error("Update priority error:", updateError);
+      return {
+        ok: false,
+        error: `Erro ao atualizar prioridade: ${updateError.message}`,
+      };
+    }
+
+    // Revalidar página do admin
+    revalidatePath("/admin");
+
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao atualizar prioridade.",
+    };
+  }
+}
+
+/**
+ * Server Action: Deletar uma demanda
+ */
+export async function deleteDemand(
+  demandId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    // Primeiro: garantir que há um usuário autenticado (rota /admin)
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return { ok: false, error: "Não autenticado" };
+    }
+
+    /**
+     * IMPORTANTE:
+     * A tabela `demands` tem RLS ativo e (por design) NÃO tem policy de DELETE.
+     * Logo, deletar usando o client "normal" pode resultar em 0 linhas afetadas
+     * sem erro. Para o painel admin, usamos o service_role (server-side).
+     */
+    const admin = createAdminClient();
+
+    // Buscar anexos antes de deletar (para limpar storage)
+    const { data: existing, error: existingError } = await admin
+      .from("demands")
+      .select("id, attachment_urls")
+      .eq("id", demandId)
+      .maybeSingle();
+
+    if (existingError) {
+      console.error("Fetch demand before delete error:", existingError);
+      return {
+        ok: false,
+        error: `Erro ao buscar demanda: ${existingError.message}`,
+      };
+    }
+
+    if (!existing?.id) {
+      return { ok: false, error: "Demanda não encontrada" };
+    }
+
+    // Deletar anexos do Storage (best-effort; se falhar, ainda deletamos a demanda)
+    const attachmentPaths =
+      (existing as unknown as { attachment_urls?: string[] }).attachment_urls ||
+      [];
+    if (Array.isArray(attachmentPaths) && attachmentPaths.length > 0) {
+      const { error: storageError } = await admin.storage
+        .from("demand-uploads")
+        .remove(attachmentPaths);
+
+      if (storageError) {
+        console.error("Delete storage objects error:", storageError);
+      }
+    }
+
+    // Deletar demanda (confirmando linhas afetadas via select)
+    const { data: deletedRows, error: deleteError } = await admin
+      .from("demands")
+      .delete()
+      .eq("id", demandId)
+      .select("id");
+
+    if (deleteError) {
+      console.error("Delete demand error:", deleteError);
+      return {
+        ok: false,
+        error: `Erro ao deletar demanda: ${deleteError.message}`,
+      };
+    }
+
+    if (!deletedRows || deletedRows.length === 0) {
+      return {
+        ok: false,
+        error:
+          "Não foi possível excluir a demanda (sem permissão de DELETE ou demanda não encontrada).",
+      };
+    }
+
+    revalidatePath("/admin");
+    return { ok: true };
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao deletar demanda.",
     };
   }
 }

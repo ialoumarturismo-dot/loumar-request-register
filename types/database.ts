@@ -41,6 +41,9 @@ export type Database = {
     Tables: {
       demands: {
         Row: {
+          admin_notes: string | null;
+          admin_status: string | null;
+          assigned_to: string | null;
           attachment_urls: string[] | null;
           created_at: string;
           demand_type: string;
@@ -49,11 +52,17 @@ export type Database = {
           id: string;
           impact_level: string;
           name: string;
+          priority: string | null;
+          priority_score: number | null;
           reference_links: string[] | null;
+          resolved_at: string | null;
           status: string;
           system_area: string;
         };
         Insert: {
+          admin_notes?: string | null;
+          admin_status?: string | null;
+          assigned_to?: string | null;
           attachment_urls?: string[] | null;
           created_at?: string;
           demand_type: string;
@@ -62,11 +71,17 @@ export type Database = {
           id?: string;
           impact_level: string;
           name: string;
+          priority?: string | null;
+          priority_score?: number | null;
           reference_links?: string[] | null;
+          resolved_at?: string | null;
           status?: string;
           system_area: string;
         };
         Update: {
+          admin_notes?: string | null;
+          admin_status?: string | null;
+          assigned_to?: string | null;
           attachment_urls?: string[] | null;
           created_at?: string;
           demand_type?: string;
@@ -75,7 +90,10 @@ export type Database = {
           id?: string;
           impact_level?: string;
           name?: string;
+          priority?: string | null;
+          priority_score?: number | null;
           reference_links?: string[] | null;
+          resolved_at?: string | null;
           status?: string;
           system_area?: string;
         };
