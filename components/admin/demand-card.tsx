@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { Database } from "@/types/database";
@@ -58,6 +59,62 @@ export default function DemandCard({
   setDemandUpdating,
 }: DemandCardProps) {
   const adminStatus = demand.admin_status || "Em análise";
+  const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
+  const attachmentModalCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Prevenir onClick se o modal de anexos está aberto ou acabou de fechar
+    if (isAttachmentModalOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    
+    // Verificar se o click veio de um elemento do Dialog (overlay ou conteúdo)
+    const target = e.target as HTMLElement;
+    if (target.closest('[role="dialog"]') || target.closest('[data-radix-portal]')) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    
+    onClick?.();
+  };
+
+  const handleAttachmentModalChange = (open: boolean) => {
+    if (open) {
+      // Quando o modal abre, setar imediatamente
+      setIsAttachmentModalOpen(true);
+      // Limpar timeout se existir
+      if (attachmentModalCloseTimeoutRef.current) {
+        clearTimeout(attachmentModalCloseTimeoutRef.current);
+        attachmentModalCloseTimeoutRef.current = null;
+      }
+    } else {
+      // Quando o modal fecha, manter como true por um período maior
+      // para evitar que o onClick do Card seja disparado pelo evento de fechamento
+      if (attachmentModalCloseTimeoutRef.current) {
+        clearTimeout(attachmentModalCloseTimeoutRef.current);
+      }
+      
+      // Adicionar delay de 500ms antes de permitir o onClick do Card
+      // Isso garante que qualquer evento de click do Dialog seja ignorado
+      // O Dialog do Radix UI pode disparar eventos quando fecha, então precisamos de um delay maior
+      attachmentModalCloseTimeoutRef.current = setTimeout(() => {
+        setIsAttachmentModalOpen(false);
+        attachmentModalCloseTimeoutRef.current = null;
+      }, 500);
+    }
+  };
+
+  // Cleanup do timeout quando o componente desmontar
+  useEffect(() => {
+    return () => {
+      if (attachmentModalCloseTimeoutRef.current) {
+        clearTimeout(attachmentModalCloseTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <Card
@@ -65,7 +122,7 @@ export default function DemandCard({
         "group cursor-pointer transition-all hover:shadow-sm hover:-translate-y-[1px] hover:border-primary/40 active:translate-y-0",
         className
       )}
-      onClick={onClick}
+      onClick={handleCardClick}
     >
       <CardHeader className="pb-1.5 pt-2.5 space-y-1.5">
         <div className="flex items-start justify-between gap-2">
@@ -146,6 +203,7 @@ export default function DemandCard({
               attachmentPaths={demand.attachment_urls}
               variant="icon"
               title="Ver anexos"
+              onOpenChange={handleAttachmentModalChange}
             />
           )}
           {demand.assigned_to ? (

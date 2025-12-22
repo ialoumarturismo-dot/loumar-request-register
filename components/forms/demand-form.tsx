@@ -39,7 +39,6 @@ import {
 // Ajustado para suporte apenas aos departamentos válidos [B2B, B2C, Concierge, etc.]
 const DEPARTMENTS = [
   "B2B",
-  "B2C",
   "Call Center",
   "Balcão (PDV)",
   "Suporte",
@@ -47,8 +46,6 @@ const DEPARTMENTS = [
   "Financeiro",
   "Marketing",
   "Operacional",
-  "Produto",
-  "Tech",
   "Outro",
 ];
 
@@ -83,20 +80,19 @@ const normalizeUrl = (url: string): string => {
 
 const demandFormSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
-  department: z.enum([
-    "B2B",
-    "B2C",
-    "Call Center",
-    "Balcão (PDV)",
-    "Suporte",
-    "Concierge",
-    "Financeiro",
-    "Marketing",
-    "Operacional",
-    "Produto",
-    "Tech",
-    "Outro",
-  ]),
+  department: z
+    .enum([
+      "B2B",
+      "Call Center",
+      "Balcão (PDV)",
+      "Suporte",
+      "Concierge",
+      "Financeiro",
+      "Marketing",
+      "Operacional",
+      "Outro",
+    ])
+    .optional(),
   demand_type: z.enum(["Bug", "Melhoria", "Ideia", "Ajuste"]),
   system_area: z.string().min(1, "Sistema/área é obrigatório"),
   impact_level: z.enum(["Bloqueante", "Alto", "Médio", "Baixo"]),
@@ -158,7 +154,7 @@ export default function DemandForm() {
     resolver: zodResolver(demandFormSchema) as any,
     defaultValues: {
       name: "",
-      department: "B2B",
+      department: undefined,
       demand_type: "Bug",
       system_area: "",
       impact_level: "Baixo",
@@ -170,6 +166,15 @@ export default function DemandForm() {
   const onSubmit = async (data: DemandFormValues) => {
     startTransition(async () => {
       try {
+        // Validar department manualmente
+        if (!data.department) {
+          form.setError("department", {
+            type: "required",
+            message: "Setor é obrigatório",
+          });
+          return;
+        }
+
         // Filtrar links vazios, normalizar URLs e validar
         const validLinks = referenceLinks
           .filter((link) => link.trim() !== "")
@@ -401,7 +406,7 @@ export default function DemandForm() {
             Setor *
           </Label>
           <Select
-            value={form.watch("department")}
+            value={form.watch("department") || undefined}
             onValueChange={(value) =>
               form.setValue(
                 "department",
@@ -482,9 +487,8 @@ export default function DemandForm() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="erp-sistemao">ERP (Sistemão)</SelectItem>
-              <SelectItem value="ia-sdr">IA SDR (Pré atendimento)</SelectItem>
-              <SelectItem value="ia-conversacional">
-                IA Conversacional
+              <SelectItem value="wts-chat">
+                Plataforma de Atendimento (WTS Chat)
               </SelectItem>
             </SelectContent>
           </Select>
