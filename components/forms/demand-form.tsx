@@ -39,13 +39,11 @@ import {
 // Ajustado para suporte apenas aos departamentos válidos [B2B, B2C, Concierge, etc.]
 const DEPARTMENTS = [
   "B2B",
-  "Call Center",
-  "Balcão (PDV)",
-  "Suporte",
+  "B2C",
   "Concierge",
   "Financeiro",
   "Marketing",
-  "Operacional",
+  "Produto",
   "Tech",
   "Outro",
 ];
@@ -79,25 +77,6 @@ const normalizeUrl = (url: string): string => {
   return trimmed;
 };
 
-// Função para validar URL (aceita com ou sem protocolo)
-const isValidUrl = (url: string): boolean => {
-  if (!url || url.trim() === "") return true; // URLs vazias são válidas (opcional)
-
-  const normalized = normalizeUrl(url);
-
-  // Tenta validar como URL
-  try {
-    const urlObj = new URL(normalized);
-    // Verifica se tem hostname válido e não é apenas protocolo
-    return urlObj.hostname.length > 0 && urlObj.hostname !== "localhost";
-  } catch {
-    // Se falhar na validação, verifica se pelo menos parece uma URL básica
-    return /^https?:\/\/[a-zA-Z0-9][a-zA-Z0-9\-.]*\.[a-zA-Z]{2,}/.test(
-      normalized
-    );
-  }
-};
-
 const demandFormSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   department: z.enum([
@@ -116,12 +95,7 @@ const demandFormSchema = z.object({
   description: z
     .string()
     .min(10, "Descrição deve ter pelo menos 10 caracteres"),
-  reference_links: z
-    .array(
-      z.string().refine((val) => isValidUrl(val), { message: "URL inválida" })
-    )
-    .min(0)
-    .default([]),
+  reference_links: z.array(z.string()).min(0).default([]),
 });
 
 type DemandFormValues = z.infer<typeof demandFormSchema> & {
