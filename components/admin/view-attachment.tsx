@@ -23,7 +23,6 @@ interface ViewAttachmentProps {
   variant?: "icon" | "grid";
   title?: string;
   className?: string;
-  onOpenChange?: (open: boolean) => void;
 }
 
 export default function ViewAttachment({
@@ -31,7 +30,6 @@ export default function ViewAttachment({
   variant = "grid",
   title = "Ver anexos",
   className,
-  onOpenChange,
 }: ViewAttachmentProps) {
   const [open, setOpen] = useState(false);
   const [activePath, setActivePath] = useState<string | null>(null);
@@ -125,12 +123,6 @@ export default function ViewAttachment({
   const openOverlay = (path?: string) => {
     if (path) setActivePath(path);
     setOpen(true);
-    onOpenChange?.(true);
-  };
-
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
-    onOpenChange?.(newOpen);
   };
 
   const handleOpenInNewTab = async () => {
@@ -163,7 +155,7 @@ export default function ViewAttachment({
           <ImageIcon className="h-3.5 w-3.5" />
         </Button>
 
-        <Dialog open={open} onOpenChange={handleOpenChange}>
+        <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="max-w-4xl p-0 overflow-hidden">
             <DialogHeader className="px-4 py-3 border-b">
               <DialogTitle className="flex items-center justify-between">
@@ -325,7 +317,7 @@ export default function ViewAttachment({
         ))}
       </div>
 
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-5xl p-0 overflow-hidden">
           <DialogHeader className="px-4 py-3 border-b">
             <DialogTitle className="flex items-center justify-between">
