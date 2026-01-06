@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getDemands } from "@/app/actions/demands";
@@ -18,9 +15,10 @@ import DemandFilters, {
 } from "@/components/admin/demand-filters";
 import DemandCard from "@/components/admin/demand-card";
 import type { Database } from "@/types/database";
-import { LayoutGrid, List, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { getMyProfile } from "@/app/actions/users";
 
 type Demand = Database["public"]["Tables"]["demands"]["Row"];
 
@@ -33,22 +31,101 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDemand, setSelectedDemand] = useState<Demand | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [userRole, setUserRole] = useState<"admin" | "sector_user" | null>(
+    null
+  );
   const [filters, setFilters] = useState<FilterValues>({
     adminStatus: "Todos",
     impactLevel: "Todos",
     department: "Todos",
+    destinationDepartment: "Todos",
     search: "",
+    dateRange: null,
   });
   // Proteção contra race conditions: rastrear updates em andamento
   const [updatingDemands, setUpdatingDemands] = useState<Set<string>>(
     new Set()
   );
 
-  // Carregar demandas ao montar componente
+  // Carregar perfil e demandas ao montar componente
   useEffect(() => {
+    loadProfile();
     loadDemands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Estado para rastrear se o modal foi fechado manualmente (para evitar reabertura)
+  const wasClosedManuallyRef = useRef(false);
+  const closingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isClosingRef = useRef(false);
+
+  // Função helper para verificar URL e abrir modal
+  const checkUrlAndOpenModal = useCallback(() => {
+    if (typeof window === "undefined" || demands.length === 0 || isModalOpen)
+      return;
+
+    // Não reabrir se foi fechado manualmente recentemente
+    if (wasClosedManuallyRef.current) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const demandId = params.get("demandId");
+
+    if (demandId) {
+      const demand = demands.find((d) => d.id === demandId);
+      if (demand && (!selectedDemand || selectedDemand.id !== demandId)) {
+        setSelectedDemand(demand);
+        setIsModalOpen(true);
+        wasClosedManuallyRef.current = false; // Reset flag quando abrir
+      }
+    }
+  }, [demands, selectedDemand, isModalOpen]);
+
+  // Abrir modal quando houver demandId na URL (quando demands mudarem)
+  useEffect(() => {
+    checkUrlAndOpenModal();
+  }, [checkUrlAndOpenModal]);
+
+  // Listener para mudanças na URL (popstate para back/forward)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handlePopState = () => {
+      // Reset flag quando usuário navega com back/forward
+      wasClosedManuallyRef.current = false;
+      checkUrlAndOpenModal();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    // Verificação periódica para capturar mudanças via router.push
+    // (apenas quando não há modal aberto, para detectar quando alguém navega via URL)
+    const interval = setInterval(() => {
+      if (!isModalOpen && typeof window !== "undefined" && !wasClosedManuallyRef.current) {
+        const params = new URLSearchParams(window.location.search);
+        const demandId = params.get("demandId");
+        // Só verificar se há demandId na URL mas modal não está aberto
+        if (demandId && !selectedDemand) {
+          checkUrlAndOpenModal();
+        }
+      }
+    }, 300); // Verifica a cada 300ms apenas quando necessário
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      clearInterval(interval);
+    };
+  }, [checkUrlAndOpenModal, isModalOpen, selectedDemand]);
+
+  const loadProfile = async () => {
+    try {
+      const result = await getMyProfile();
+      if (result.ok) {
+        setUserRole(result.data.role);
+      }
+    } catch (error) {
+      console.error("Load profile error:", error);
+    }
+  };
 
   const loadDemands = async () => {
     setLoading(true);
@@ -199,9 +276,16 @@ export default function AdminPage() {
       filtered = filtered.filter((d) => d.impact_level === filters.impactLevel);
     }
 
-    // Filtro por setor
+    // Filtro por setor solicitante
     if (filters.department !== "Todos") {
       filtered = filtered.filter((d) => d.department === filters.department);
+    }
+
+    // Filtro por setor destinatário
+    if (filters.destinationDepartment !== "Todos") {
+      filtered = filtered.filter(
+        (d) => d.destination_department === filters.destinationDepartment
+      );
     }
 
     // Filtro por busca de texto
@@ -213,6 +297,26 @@ export default function AdminPage() {
           d.description.toLowerCase().includes(searchLower) ||
           d.system_area.toLowerCase().includes(searchLower)
       );
+    }
+
+    // Filtro por período
+    if (filters.dateRange?.from || filters.dateRange?.to) {
+      filtered = filtered.filter((d) => {
+        const demandDate = new Date(d.created_at);
+        if (filters.dateRange?.from && filters.dateRange?.to) {
+          return (
+            demandDate >= filters.dateRange.from &&
+            demandDate <= filters.dateRange.to
+          );
+        }
+        if (filters.dateRange?.from) {
+          return demandDate >= filters.dateRange.from;
+        }
+        if (filters.dateRange?.to) {
+          return demandDate <= filters.dateRange.to;
+        }
+        return true;
+      });
     }
 
     // Ordenar por prioridade (Urgente > Importante > Necessário > Interessante)
@@ -234,12 +338,57 @@ export default function AdminPage() {
   const handleDemandClick = (demand: Demand) => {
     setSelectedDemand(demand);
     setIsModalOpen(true);
+    // Atualizar URL para manter sincronização
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("demandId") !== demand.id) {
+        router.replace(`/admin?demandId=${demand.id}`, { scroll: false });
+      }
+    }
   };
 
   const handleModalClose = (open: boolean) => {
-    setIsModalOpen(open);
     if (!open) {
+      // Evitar processar múltiplas vezes o mesmo evento de fechamento
+      if (isClosingRef.current) {
+        return;
+      }
+
+      isClosingRef.current = true;
+
+      // Limpar timeout anterior se existir
+      if (closingTimeoutRef.current) {
+        clearTimeout(closingTimeoutRef.current);
+      }
+
+      // Marcar como fechado manualmente imediatamente
+      wasClosedManuallyRef.current = true;
+      
+      // Fechar modal e limpar seleção
+      setIsModalOpen(false);
       setSelectedDemand(null);
+
+      // Remover demandId da URL imediatamente usando replace para não adicionar ao histórico
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("demandId")) {
+          // Usar replace em vez de push para não adicionar entrada no histórico
+          router.replace("/admin", { scroll: false });
+        }
+      }
+
+      // Reset flags após um delay maior para garantir que a URL foi atualizada
+      // e evitar race conditions com o intervalo de verificação
+      closingTimeoutRef.current = setTimeout(() => {
+        wasClosedManuallyRef.current = false;
+        isClosingRef.current = false;
+        closingTimeoutRef.current = null;
+      }, 1000); // Aumentado para 1s para garantir que tudo foi processado
+    } else {
+      // Se estiver abrindo, resetar as flags
+      wasClosedManuallyRef.current = false;
+      isClosingRef.current = false;
+      setIsModalOpen(true);
     }
   };
 
@@ -252,62 +401,29 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header com controles */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Gestão de Demandas
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1.5">
-            Visualize e gerencie todas as demandas registradas
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant={viewMode === "kanban" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("kanban")}
-          >
-            <LayoutGrid className="h-4 w-4 mr-2" />
-            Kanban
-          </Button>
-          <Button
-            variant={viewMode === "list" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("list")}
-          >
-            <List className="h-4 w-4 mr-2" />
-            Lista
-          </Button>
-        </div>
-      </div>
-
+    <div className="space-y-4">
       {/* Filtros */}
-      <DemandFilters filters={filters} onFiltersChange={setFilters} />
+      <DemandFilters 
+        filters={filters} 
+        onFiltersChange={setFilters}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
 
       {/* Estatísticas rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-3">
         <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-foreground">
-              Total
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground mb-1">Total</div>
+            <div className="text-xl font-bold text-foreground">
               {demands.length}
             </div>
           </CardContent>
         </Card>
         <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-foreground">
-              Em Análise
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-500">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground mb-1">Em Análise</div>
+            <div className="text-xl font-bold text-blue-500">
               {
                 demands.filter(
                   (d) => (d.admin_status || "Em análise") === "Em análise"
@@ -317,25 +433,17 @@ export default function AdminPage() {
           </CardContent>
         </Card>
         <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-foreground">
-              Acatadas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground mb-1">Acatadas</div>
+            <div className="text-xl font-bold text-green-500">
               {demands.filter((d) => d.admin_status === "Acatada").length}
             </div>
           </CardContent>
         </Card>
         <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-foreground">
-              Resolvidas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-500">
+          <CardContent className="p-3">
+            <div className="text-xs text-muted-foreground mb-1">Resolvidas</div>
+            <div className="text-xl font-bold text-emerald-500">
               {demands.filter((d) => d.admin_status === "Resolvida").length}
             </div>
           </CardContent>
@@ -404,6 +512,7 @@ export default function AdminPage() {
         onRefresh={
           selectedDemand ? () => refreshDemand(selectedDemand.id) : undefined
         }
+        userRole={userRole}
         onDemandDeleted={(deletedId) => {
           // Remover demanda da lista local imediatamente (optimistic update)
           setDemands((prev) => prev.filter((d) => d.id !== deletedId));

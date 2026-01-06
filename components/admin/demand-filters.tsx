@@ -10,18 +10,27 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { X, Search } from "lucide-react";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { X, Search, LayoutGrid, List } from "lucide-react";
+import { useState, useEffect } from "react";
+import { listDepartments } from "@/app/actions/departments";
 
 export interface FilterValues {
   adminStatus: string;
   impactLevel: string;
   department: string;
+  destinationDepartment: string;
   search: string;
+  dateRange: { from: Date | null; to: Date | null } | null;
 }
+
+type ViewMode = "kanban" | "list";
 
 interface DemandFiltersProps {
   filters: FilterValues;
   onFiltersChange: (filters: FilterValues) => void;
+  viewMode?: ViewMode;
+  onViewModeChange?: (mode: ViewMode) => void;
 }
 
 const ADMIN_STATUSES = [
@@ -32,23 +41,37 @@ const ADMIN_STATUSES = [
   "Descartada",
 ];
 const IMPACT_LEVELS = ["Todos", "Bloqueante", "Alto", "Médio", "Baixo"];
-const DEPARTMENTS = [
-  "Todos",
-  "B2B",
-  "B2C",
-  "Concierge",
-  "Financeiro",
-  "Marketing",
-  "Produto",
-  "Tech",
-  "Outro",
-];
 
 export default function DemandFilters({
   filters,
   onFiltersChange,
+  viewMode,
+  onViewModeChange,
 }: DemandFiltersProps) {
-  const updateFilter = (key: keyof FilterValues, value: string) => {
+  const [availableDepartments, setAvailableDepartments] = useState<
+    Array<{ id: string; name: string; created_at: string }>
+  >([]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const result = await listDepartments();
+        if (result.ok) {
+          setAvailableDepartments(result.data);
+        } else {
+          console.error("Load departments error:", result.error);
+        }
+      } catch (error) {
+        console.error("Load departments error:", error);
+      }
+    };
+    loadDepartments();
+  }, []);
+
+  const updateFilter = (
+    key: keyof FilterValues,
+    value: string | { from: Date | null; to: Date | null } | null
+  ) => {
     onFiltersChange({
       ...filters,
       [key]: value,
@@ -60,7 +83,9 @@ export default function DemandFilters({
       adminStatus: "Todos",
       impactLevel: "Todos",
       department: "Todos",
+      destinationDepartment: "Todos",
       search: "",
+      dateRange: null,
     });
   };
 
@@ -68,12 +93,33 @@ export default function DemandFilters({
     filters.adminStatus !== "Todos" ||
     filters.impactLevel !== "Todos" ||
     filters.department !== "Todos" ||
-    filters.search !== "";
+    filters.destinationDepartment !== "Todos" ||
+    filters.search !== "" ||
+    filters.dateRange !== null;
 
   return (
-    <div className="space-y-4 p-4 border border-border/50 rounded-lg bg-card/50 backdrop-blur-sm">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Filtros</h3>
+    <div className="p-3 border border-border/50 rounded-lg bg-card/50 backdrop-blur-sm">
+      <div className="flex items-center justify-between mb-3">
+        {viewMode !== undefined && onViewModeChange && (
+          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-md border border-border/50">
+            <Button
+              variant={viewMode === "kanban" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => onViewModeChange("kanban")}
+              className="h-7 px-2"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => onViewModeChange("list")}
+              className="h-7 px-2"
+            >
+              <List className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
         {hasActiveFilters && (
           <Button
             variant="ghost"
@@ -87,7 +133,7 @@ export default function DemandFilters({
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
         {/* Busca por texto */}
         <div className="space-y-2">
           <Label htmlFor="search" className="text-xs">
@@ -105,10 +151,22 @@ export default function DemandFilters({
           </div>
         </div>
 
-        {/* Status administrativo */}
+        {/* Filtro por período */}
+        <div className="space-y-2">
+          <Label htmlFor="date_range" className="text-xs">
+            Período
+          </Label>
+          <DateRangePicker
+            value={filters.dateRange}
+            onChange={(range) => updateFilter("dateRange", range)}
+            placeholder="Selecione um período"
+          />
+        </div>
+
+        {/* Status operacional */}
         <div className="space-y-2">
           <Label htmlFor="admin_status" className="text-xs">
-            Status Administrativo
+            Status Operacional
           </Label>
           <Select
             value={filters.adminStatus}
@@ -149,22 +207,48 @@ export default function DemandFilters({
           </Select>
         </div>
 
-        {/* Setor */}
+        {/* Setor Solicitante */}
         <div className="space-y-2">
           <Label htmlFor="department" className="text-xs">
-            Setor
+            Setor Solicitante
           </Label>
           <Select
             value={filters.department}
             onValueChange={(value) => updateFilter("department", value)}
           >
             <SelectTrigger id="department">
-              <SelectValue />
+              <SelectValue placeholder="Selecione um setor" />
             </SelectTrigger>
             <SelectContent>
-              {DEPARTMENTS.map((dept) => (
-                <SelectItem key={dept} value={dept}>
-                  {dept}
+              <SelectItem value="Todos">Todos</SelectItem>
+              {availableDepartments.map((dept) => (
+                <SelectItem key={dept.id} value={dept.name}>
+                  {dept.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Setor de Destino */}
+        <div className="space-y-2">
+          <Label htmlFor="destination_department" className="text-xs">
+            Setor de Destino
+          </Label>
+          <Select
+            value={filters.destinationDepartment}
+            onValueChange={(value) =>
+              updateFilter("destinationDepartment", value)
+            }
+          >
+            <SelectTrigger id="destination_department">
+              <SelectValue placeholder="Selecione um setor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Todos">Todos</SelectItem>
+              {availableDepartments.map((dept) => (
+                <SelectItem key={dept.id} value={dept.name}>
+                  {dept.name}
                 </SelectItem>
               ))}
             </SelectContent>

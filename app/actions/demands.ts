@@ -42,7 +42,7 @@ const normalizeUrl = (url: string): string => {
 const createDemandSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   department: z.string().min(2, "Setor deve ter pelo menos 2 caracteres"),
-  demand_type: z.enum(["Bug", "Melhoria", "Ideia", "Ajuste"]),
+  demand_type: z.enum(["Bug", "Melhoria", "Ideia", "Ajuste", "Outro"]),
   system_area: z
     .string()
     .min(2, "Sistema/área deve ter pelo menos 2 caracteres"),
@@ -59,6 +59,7 @@ const createDemandSchema = z.object({
     )
     .optional()
     .default([]),
+  destination_department: z.enum(["Manutenção", "TI", "Outro"]).optional(),
 });
 
 type CreateDemandInput = z.infer<typeof createDemandSchema>;
@@ -72,6 +73,7 @@ export async function createDemand(formData: FormData) {
     const system_area = formData.get("system_area") as string;
     const impact_level = formData.get("impact_level") as string;
     const description = formData.get("description") as string;
+    const destination_department = formData.get("destination_department") as string | null;
     const referenceLinksJson = formData.get("reference_links") as string | null;
 
     // Extrair múltiplos arquivos
@@ -103,6 +105,7 @@ export async function createDemand(formData: FormData) {
       impact_level,
       description,
       reference_links: referenceLinks,
+      destination_department: destination_department || undefined,
     });
 
     if (!validation.success) {
@@ -200,6 +203,69 @@ export async function createDemand(formData: FormData) {
         new Date()
       );
 
+      // Roteamento: encontrar responsável default para o setor de destino
+      let assignedToUserId: string | null = null;
+      if (validatedData.destination_department) {
+        console.log("[createDemand] Buscando responsável para departamento:", validatedData.destination_department);
+        
+        // Primeiro, tentar buscar responsável default em department_responsibles
+        const { data: responsible, error: respError } = await supabase
+          .from("department_responsibles")
+          .select("user_id")
+          .eq("department", validatedData.destination_department)
+          .eq("is_default", true)
+          .limit(1)
+          .maybeSingle();
+
+        if (respError) {
+          console.error("[createDemand] Erro ao buscar responsável:", respError);
+        }
+
+        if (responsible) {
+          assignedToUserId = responsible.user_id;
+          console.log("[createDemand] Responsável encontrado em department_responsibles:", assignedToUserId);
+        } else {
+          // Fallback: buscar primeiro usuário do departamento em user_departments
+          console.log("[createDemand] Nenhum responsável default encontrado, buscando em user_departments...");
+          const { data: userDept, error: userDeptError } = await supabase
+            .from("user_departments")
+            .select("user_id")
+            .eq("department", validatedData.destination_department)
+            .limit(1)
+            .maybeSingle();
+
+          if (userDeptError) {
+            console.error("[createDemand] Erro ao buscar usuário do departamento:", userDeptError);
+          }
+
+          if (userDept) {
+            assignedToUserId = userDept.user_id;
+            console.log("[createDemand] Usuário encontrado em user_departments (fallback):", assignedToUserId);
+            
+            // Criar registro em department_responsibles para próxima vez (opcional, não bloqueia)
+            // Usar admin client pois RLS pode bloquear
+            try {
+              const admin = createAdminClient();
+              const { error: insertError } = await admin
+                .from("department_responsibles")
+                .insert({
+                  department: validatedData.destination_department,
+                  user_id: assignedToUserId,
+                  is_default: true,
+                });
+              
+              if (insertError) {
+                console.error("[createDemand] Erro ao criar registro em department_responsibles (não crítico):", insertError);
+              }
+            } catch (err) {
+              console.error("[createDemand] Erro ao criar registro em department_responsibles (não crítico):", err);
+            }
+          } else {
+            console.log("[createDemand] Nenhum usuário encontrado para departamento:", validatedData.destination_department);
+          }
+        }
+      }
+
       const { data, error } = await supabase
         .from("demands")
         .insert({
@@ -212,6 +278,8 @@ export async function createDemand(formData: FormData) {
           description: validatedData.description,
           attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : [],
           reference_links: validatedData.reference_links || [],
+          destination_department: validatedData.destination_department || null,
+          assigned_to_user_id: assignedToUserId,
           status: "Recebido",
           admin_status: "Em análise",
           priority_score: priorityScore,
@@ -225,6 +293,55 @@ export async function createDemand(formData: FormData) {
           ok: false,
           error: `Erro ao criar demanda: ${error.message}`,
         };
+      }
+
+      // Registrar evento de criação
+      // Como é formulário público, não há usuário autenticado
+      // Buscar um perfil admin para usar como autor do evento (ou criar sem autor)
+      const admin = createAdminClient();
+      let adminProfile: { id: string; display_name: string } | null = null;
+      
+      try {
+        const { data: profileData } = await admin
+          .from("profiles")
+          .select("id, display_name")
+          .eq("role", "admin")
+          .limit(1)
+          .maybeSingle();
+        
+        adminProfile = profileData;
+      } catch (err) {
+        console.error("[createDemand] Erro ao buscar perfil admin:", err);
+      }
+
+      if (adminProfile) {
+        try {
+          const { error: eventError } = await admin.from("demand_events").insert({
+            demand_id: demandId,
+            author_user_id: adminProfile.id,
+            event_type: "status_change",
+            body: `Demanda criada via formulário público`,
+            visibility: "manager_only",
+          });
+          
+          if (eventError) {
+            console.error("[createDemand] Erro ao criar evento:", eventError);
+          }
+        } catch (err) {
+          console.error("[createDemand] Erro ao criar evento:", err);
+        }
+      }
+
+      // Disparar notificação WhatsApp se houver responsável atribuído
+      if (assignedToUserId && validatedData.destination_department) {
+        console.log("[createDemand] Disparando notificação para usuário:", assignedToUserId, "demanda:", demandId);
+        // Importar função de notificação (será criada abaixo)
+        const { sendDemandCreatedNotification } = await import("./notifications");
+        await sendDemandCreatedNotification(demandId, assignedToUserId).catch(
+          (err) => console.error("[createDemand] Notification error:", err)
+        );
+      } else {
+        console.log("[createDemand] Notificação não disparada - assignedToUserId:", assignedToUserId, "destination_department:", validatedData.destination_department);
       }
 
       return {
@@ -320,6 +437,7 @@ function calculatePriorityScore(
     Melhoria: 10,
     Ideia: 5,
     Ajuste: 15,
+    Outro: 10,
   };
   const typeScore = typeScores[demandType] || 10;
 
@@ -338,6 +456,8 @@ function calculatePriorityScore(
 
 /**
  * Server Action: Atualizar status de uma demanda
+ * Para admin: atualiza diretamente
+ * Para sector_user: usa RPC function set_demand_status
  */
 const updateStatusSchema = z.object({
   status: z.enum(["Recebido", "Em análise", "Em execução", "Concluído"]),
@@ -363,6 +483,13 @@ export async function updateDemandStatus(
       };
     }
 
+    // Verificar role do usuário
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
     // Validar status
     const validation = updateStatusSchema.safeParse({ status });
     if (!validation.success) {
@@ -372,7 +499,19 @@ export async function updateDemandStatus(
       };
     }
 
-    // Atualizar apenas o campo status
+    // Se for sector_user, usar RPC function
+    if (profile?.role === "sector_user") {
+      return await setDemandStatus(demandId, validation.data.status);
+    }
+
+    // Buscar status anterior
+    const { data: currentDemand } = await supabase
+      .from("demands")
+      .select("status")
+      .eq("id", demandId)
+      .single();
+
+    // Admin: atualizar diretamente
     const { error: updateError } = await supabase
       .from("demands")
       .update({ status: validation.data.status })
@@ -384,6 +523,26 @@ export async function updateDemandStatus(
         ok: false,
         error: `Erro ao atualizar status: ${updateError.message}`,
       };
+    }
+
+    // Registrar evento se status mudou
+    if (currentDemand && currentDemand.status !== validation.data.status) {
+      try {
+        const admin = createAdminClient();
+        const { error: eventError } = await admin.from("demand_events").insert({
+          demand_id: demandId,
+          author_user_id: user.id,
+          event_type: "status_change",
+          body: `Status alterado de "${currentDemand.status}" para "${validation.data.status}"`,
+          visibility: "manager_only",
+        });
+        
+        if (eventError) {
+          console.error("Erro ao criar evento de mudança de status:", eventError);
+        }
+      } catch (err) {
+        console.error("Erro ao criar evento de mudança de status:", err);
+      }
     }
 
     // Revalidar página do admin para refletir mudanças
@@ -449,6 +608,13 @@ export async function updateAdminStatus(
       admin_status: validation.data.admin_status,
     };
 
+    // Buscar admin_status anterior
+    const { data: currentDemand } = await supabase
+      .from("demands")
+      .select("admin_status")
+      .eq("id", demandId)
+      .single();
+
     // Se foi resolvida, adicionar timestamp
     if (validation.data.admin_status === "Resolvida") {
       updateData.resolved_at = new Date().toISOString();
@@ -466,6 +632,26 @@ export async function updateAdminStatus(
         ok: false,
         error: `Erro ao atualizar status administrativo: ${updateError.message}`,
       };
+    }
+
+    // Registrar evento se admin_status mudou
+    if (currentDemand && currentDemand.admin_status !== validation.data.admin_status) {
+      try {
+        const admin = createAdminClient();
+        const { error: eventError } = await admin.from("demand_events").insert({
+          demand_id: demandId,
+          author_user_id: user.id,
+          event_type: "status_change",
+          body: `Status administrativo alterado de "${currentDemand.admin_status || "N/A"}" para "${validation.data.admin_status}"`,
+          visibility: "manager_only",
+        });
+        
+        if (eventError) {
+          console.error("Erro ao criar evento de mudança de admin_status:", eventError);
+        }
+      } catch (err) {
+        console.error("Erro ao criar evento de mudança de admin_status:", err);
+      }
     }
 
     // Revalidar página do admin
@@ -625,6 +811,13 @@ export async function updatePriority(
       };
     }
 
+    // Buscar priority anterior
+    const { data: currentDemand } = await supabase
+      .from("demands")
+      .select("priority")
+      .eq("id", demandId)
+      .single();
+
     // Atualizar priority
     const { error: updateError } = await supabase
       .from("demands")
@@ -637,6 +830,26 @@ export async function updatePriority(
         ok: false,
         error: `Erro ao atualizar prioridade: ${updateError.message}`,
       };
+    }
+
+    // Registrar evento se priority mudou
+    if (currentDemand && currentDemand.priority !== validation.data.priority) {
+      try {
+        const admin = createAdminClient();
+        const { error: eventError } = await admin.from("demand_events").insert({
+          demand_id: demandId,
+          author_user_id: user.id,
+          event_type: "status_change",
+          body: `Prioridade alterada de "${currentDemand.priority || "N/A"}" para "${validation.data.priority}"`,
+          visibility: "manager_only",
+        });
+        
+        if (eventError) {
+          console.error("Erro ao criar evento de mudança de prioridade:", eventError);
+        }
+      } catch (err) {
+        console.error("Erro ao criar evento de mudança de prioridade:", err);
+      }
     }
 
     // Revalidar página do admin
@@ -743,6 +956,493 @@ export async function deleteDemand(
     return {
       ok: false,
       error: "Erro inesperado ao deletar demanda.",
+    };
+  }
+}
+
+/**
+ * Server Action: Atribuir/reassinar demanda (apenas admin)
+ */
+export async function assignDemand(
+  demandId: string,
+  userId: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Verificar se usuário é admin
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        ok: false,
+        error: "Não autenticado",
+      };
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || profile.role !== "admin") {
+      return {
+        ok: false,
+        error: "Apenas administradores podem atribuir demandas",
+      };
+    }
+
+    // Buscar demanda atual para registrar evento
+    const { data: currentDemand } = await supabase
+      .from("demands")
+      .select("assigned_to_user_id, destination_department")
+      .eq("id", demandId)
+      .single();
+
+    if (!currentDemand) {
+      return {
+        ok: false,
+        error: "Demanda não encontrada",
+      };
+    }
+
+    const admin = createAdminClient();
+
+    // Atualizar atribuição
+    const { error: updateError } = await admin
+      .from("demands")
+      .update({ assigned_to_user_id: userId || null })
+      .eq("id", demandId);
+
+    if (updateError) {
+      return {
+        ok: false,
+        error: `Erro ao atribuir demanda: ${updateError.message}`,
+      };
+    }
+
+    // Registrar evento
+    if (currentDemand.assigned_to_user_id !== userId) {
+      const { data: oldUser } = currentDemand.assigned_to_user_id
+        ? await admin
+            .from("profiles")
+            .select("display_name")
+            .eq("id", currentDemand.assigned_to_user_id)
+            .single()
+        : { data: null };
+
+      const { data: newUser } = userId
+        ? await admin
+            .from("profiles")
+            .select("display_name")
+            .eq("id", userId)
+            .single()
+        : { data: null };
+
+      const eventBody = newUser
+        ? `Demanda atribuída a ${newUser.display_name}`
+        : oldUser
+        ? `Atribuição removida de ${oldUser.display_name}`
+        : "Atribuição atualizada";
+
+      await admin.from("demand_events").insert({
+        demand_id: demandId,
+        author_user_id: user.id,
+        event_type: "assignment_change",
+        body: eventBody,
+        visibility: "manager_only",
+      });
+    }
+
+    // Disparar notificação se atribuído a um usuário
+    if (userId) {
+      const { sendDemandAssignedNotification } = await import("./notifications");
+      // Passar user.id do admin que atribuiu
+      await sendDemandAssignedNotification(demandId, userId, user.id).catch((err) =>
+        console.error("Notification error:", err)
+      );
+    }
+
+    revalidatePath("/admin");
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Assign demand error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao atribuir demanda",
+    };
+  }
+}
+
+/**
+ * Server Action: Atualizar status operacional (via RPC, sector users)
+ */
+export async function setDemandStatus(
+  demandId: string,
+  newStatus: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Validar status
+    if (!["Recebido", "Em análise", "Em execução", "Concluído"].includes(newStatus)) {
+      return {
+        ok: false,
+        error: "Status inválido",
+      };
+    }
+
+    // Chamar função RPC
+    const { data, error } = await supabase.rpc("set_demand_status", {
+      p_demand_id: demandId,
+      p_new_status: newStatus,
+    });
+
+    if (error) {
+      return {
+        ok: false,
+        error: error.message || "Erro ao atualizar status",
+      };
+    }
+
+    if (data && typeof data === "object" && "ok" in data && !data.ok) {
+      return {
+        ok: false,
+        error: (data as any).error || "Erro ao atualizar status",
+      };
+    }
+
+    revalidatePath("/admin");
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Set demand status error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao atualizar status",
+    };
+  }
+}
+
+/**
+ * Server Action: Adicionar comentário (sector users, via RPC)
+ */
+export async function addDemandComment(
+  demandId: string,
+  body: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    if (!body || body.trim() === "") {
+      return {
+        ok: false,
+        error: "Comentário não pode estar vazio",
+      };
+    }
+
+    // Chamar função RPC
+    const { data, error } = await supabase.rpc("add_demand_comment", {
+      p_demand_id: demandId,
+      p_body: body.trim(),
+    });
+
+    if (error) {
+      return {
+        ok: false,
+        error: error.message || "Erro ao adicionar comentário",
+      };
+    }
+
+    if (data && typeof data === "object" && "ok" in data && !data.ok) {
+      return {
+        ok: false,
+        error: (data as any).error || "Erro ao adicionar comentário",
+      };
+    }
+
+    revalidatePath("/admin");
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Add demand comment error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao adicionar comentário",
+    };
+  }
+}
+
+/**
+ * Server Action: Adicionar comentário do gestor (gera WhatsApp)
+ */
+export async function addManagerComment(
+  demandId: string,
+  body: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Verificar se usuário é admin
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        ok: false,
+        error: "Não autenticado",
+      };
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || profile.role !== "admin") {
+      return {
+        ok: false,
+        error: "Apenas administradores podem adicionar comentários do gestor",
+      };
+    }
+
+    if (!body || body.trim() === "") {
+      return {
+        ok: false,
+        error: "Comentário não pode estar vazio",
+      };
+    }
+
+    const admin = createAdminClient();
+
+    // Buscar demanda para verificar atribuição
+    const { data: demand } = await admin
+      .from("demands")
+      .select("assigned_to_user_id")
+      .eq("id", demandId)
+      .single();
+
+    if (!demand) {
+      return {
+        ok: false,
+        error: "Demanda não encontrada",
+      };
+    }
+
+    // Inserir evento
+    await admin.from("demand_events").insert({
+      demand_id: demandId,
+      author_user_id: user.id,
+      event_type: "comment",
+      body: body.trim(),
+      visibility: "manager_only",
+    });
+
+    // Disparar WhatsApp se houver responsável atribuído
+    if (demand.assigned_to_user_id) {
+      const { sendManagerCommentNotification } = await import("./notifications");
+      await sendManagerCommentNotification(
+        demandId,
+        demand.assigned_to_user_id,
+        user.id // Passar ID do gestor que comentou
+      ).catch((err) => console.error("Notification error:", err));
+    }
+
+    revalidatePath("/admin");
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Add manager comment error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao adicionar comentário",
+    };
+  }
+}
+
+/**
+ * Server Action: Definir prazo da demanda
+ */
+export async function setDemandDeadline(
+  demandId: string,
+  dueAt: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const supabase = await createClient();
+
+    // Verificar se usuário é admin
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        ok: false,
+        error: "Não autenticado",
+      };
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || profile.role !== "admin") {
+      return {
+        ok: false,
+        error: "Apenas administradores podem definir prazos",
+      };
+    }
+
+    const admin = createAdminClient();
+
+    // Buscar prazo anterior
+    const { data: currentDemand } = await admin
+      .from("demands")
+      .select("due_at")
+      .eq("id", demandId)
+      .single();
+
+    if (!currentDemand) {
+      return {
+        ok: false,
+        error: "Demanda não encontrada",
+      };
+    }
+
+    // Atualizar prazo
+    const { error: updateError } = await admin
+      .from("demands")
+      .update({ due_at: dueAt || null })
+      .eq("id", demandId);
+
+    if (updateError) {
+      return {
+        ok: false,
+        error: `Erro ao definir prazo: ${updateError.message}`,
+      };
+    }
+
+    // Registrar evento se mudou
+    if (currentDemand.due_at !== (dueAt || null)) {
+      const eventBody = dueAt
+        ? `Prazo definido para ${new Date(dueAt).toLocaleString("pt-BR")}`
+        : "Prazo removido";
+
+      await admin.from("demand_events").insert({
+        demand_id: demandId,
+        author_user_id: user.id,
+        event_type: "deadline_change",
+        body: eventBody,
+        visibility: "manager_only",
+      });
+    }
+
+    revalidatePath("/admin");
+    return {
+      ok: true,
+    };
+  } catch (err) {
+    console.error("Set demand deadline error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao definir prazo",
+    };
+  }
+}
+
+/**
+ * Server Action: Buscar eventos da timeline de uma demanda
+ */
+export async function getDemandEvents(
+  demandId: string
+): Promise<
+  | {
+      ok: true;
+      data: Array<{
+        id: string;
+        authorUserId: string;
+        authorName: string;
+        eventType: string;
+        body: string;
+        createdAt: string;
+      }>;
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    const supabase = await createClient();
+
+    // Verificar se usuário está autenticado
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        ok: false,
+        error: "Não autenticado",
+      };
+    }
+
+    // Buscar eventos (RLS garante que apenas admin vê)
+    const { data: events, error: eventsError } = await supabase
+      .from("demand_events")
+      .select("id, author_user_id, event_type, body, created_at")
+      .eq("demand_id", demandId)
+      .order("created_at", { ascending: false });
+
+    if (eventsError) {
+      return {
+        ok: false,
+        error: `Erro ao buscar eventos: ${eventsError.message}`,
+      };
+    }
+
+    // Buscar nomes dos autores
+    const authorIds = [...new Set((events || []).map((e) => e.author_user_id))];
+    const { data: authors } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", authorIds);
+
+    const authorsMap = new Map(
+      (authors || []).map((a) => [a.id, a.display_name])
+    );
+
+    const eventsWithAuthors = (events || []).map((event) => ({
+      id: event.id,
+      authorUserId: event.author_user_id,
+      authorName: authorsMap.get(event.author_user_id) || "Usuário desconhecido",
+      eventType: event.event_type,
+      body: event.body || "",
+      createdAt: event.created_at,
+    }));
+
+    return {
+      ok: true,
+      data: eventsWithAuthors,
+    };
+  } catch (err) {
+    console.error("Get demand events error:", err);
+    return {
+      ok: false,
+      error: "Erro inesperado ao buscar eventos",
     };
   }
 }

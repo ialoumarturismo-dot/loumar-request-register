@@ -35,19 +35,7 @@ import {
   Clipboard,
 } from "lucide-react";
 
-// Schema de validação client-side (valores em português para o formulário)
-// Ajustado para suporte apenas aos departamentos válidos [B2B, B2C, Concierge, etc.]
-const DEPARTMENTS = [
-  "B2B",
-  "Call Center",
-  "Balcão (PDV)",
-  "Suporte",
-  "Concierge",
-  "Financeiro",
-  "Marketing",
-  "Operacional",
-  "Outro",
-];
+import { listDepartments } from "@/app/actions/departments";
 
 // Função para normalizar URLs adicionando https:// se necessário
 const normalizeUrl = (url: string): string => {
@@ -78,32 +66,45 @@ const normalizeUrl = (url: string): string => {
   return trimmed;
 };
 
-const demandFormSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
-  department: z
-    .enum([
-      "B2B",
-      "Call Center",
-      "Balcão (PDV)",
-      "Suporte",
-      "Concierge",
-      "Financeiro",
-      "Marketing",
-      "Operacional",
+// Schema dinâmico baseado nos setores do banco
+const createDemandFormSchema = (
+  departmentNames: string[],
+  destinationNames: string[]
+) =>
+  z.object({
+    name: z.string().min(1, "Nome é obrigatório"),
+    department:
+      departmentNames.length > 0
+        ? z.enum(departmentNames as [string, ...string[]]).optional()
+        : z.string().optional(),
+    demand_type: z.enum([
+      "Bug",
+      "Melhoria",
+      "Ideia",
+      "Ajuste",
       "Outro",
-    ])
-    .optional(),
-  demand_type: z.enum(["Bug", "Melhoria", "Ideia", "Ajuste"]),
-  system_area: z.string().min(1, "Sistema/área é obrigatório"),
-  impact_level: z.enum(["Bloqueante", "Alto", "Médio", "Baixo"]),
-  description: z
-    .string()
-    .min(10, "Descrição deve ter pelo menos 10 caracteres"),
-  reference_links: z.array(z.string()).min(0).default([]),
-});
+    ] as const),
+    system_area: z.string().min(1, "Sistema/área é obrigatório"),
+    impact_level: z.enum(["Bloqueante", "Alto", "Médio", "Baixo", "Outro"]),
+    description: z
+      .string()
+      .min(10, "Descrição deve ter pelo menos 10 caracteres"),
+    reference_links: z.array(z.string()).min(0).default([]),
+    destination_department:
+      destinationNames.length > 0
+        ? z.enum(destinationNames as [string, ...string[]]).optional()
+        : z.string().optional(),
+  });
 
-type DemandFormValues = z.infer<typeof demandFormSchema> & {
+type DemandFormValues = {
+  name: string;
+  department?: string;
+  demand_type: "Bug" | "Melhoria" | "Ideia" | "Ajuste" | "Outro";
+  system_area: string;
+  impact_level: "Bloqueante" | "Alto" | "Médio" | "Baixo" | "Outro";
+  description: string;
   reference_links: string[];
+  destination_department?: string;
 };
 
 export default function DemandForm() {
@@ -114,6 +115,24 @@ export default function DemandForm() {
   const [previewUrls, setPreviewUrls] = useState<Map<number, string>>(
     new Map()
   );
+  const [departments, setDepartments] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+
+  // Carregar setores do banco de dados
+  useEffect(() => {
+    const loadDepartmentsData = async () => {
+      try {
+        const result = await listDepartments();
+        if (result.ok) {
+          setDepartments(result.data);
+        }
+      } catch (error) {
+        console.error("Load departments error:", error);
+      }
+    };
+    loadDepartmentsData();
+  }, []);
 
   // Limpar URLs de preview quando componente desmontar
   useEffect(() => {
@@ -150,6 +169,13 @@ export default function DemandForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachmentFiles]);
 
+  const departmentNames = departments.map((d) => d.name);
+  // Setor de Destino usa a mesma lista que Setor de Origem
+  const demandFormSchema = createDemandFormSchema(
+    departmentNames,
+    departmentNames
+  );
+
   const form = useForm<DemandFormValues>({
     resolver: zodResolver(demandFormSchema) as any,
     defaultValues: {
@@ -160,8 +186,22 @@ export default function DemandForm() {
       impact_level: "Baixo",
       description: "",
       reference_links: [],
+      destination_department: undefined,
     },
   });
+
+  // Atualizar schema quando setores forem carregados
+  useEffect(() => {
+    if (departments.length > 0) {
+      const newSchema = createDemandFormSchema(
+        departmentNames,
+        departmentNames
+      );
+      // Revalidar form com novo schema
+      form.clearErrors();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [departments]);
 
   const onSubmit = async (data: DemandFormValues) => {
     startTransition(async () => {
@@ -188,6 +228,12 @@ export default function DemandForm() {
         formData.append("system_area", data.system_area);
         formData.append("impact_level", data.impact_level);
         formData.append("description", data.description);
+        if (data.destination_department) {
+          formData.append(
+            "destination_department",
+            data.destination_department
+          );
+        }
 
         // Adicionar links de referência normalizados (como JSON array)
         if (validLinks.length > 0) {
@@ -207,7 +253,16 @@ export default function DemandForm() {
             description: "Sua demanda foi recebida e será analisada em breve.",
           });
           // Reset do formulário
-          form.reset();
+          form.reset({
+            name: "",
+            department: undefined,
+            demand_type: "Bug",
+            system_area: "",
+            impact_level: "Baixo",
+            description: "",
+            reference_links: [],
+            destination_department: undefined,
+          });
           setAttachmentFiles([]);
           setReferenceLinks([""]);
           // Reset do input de arquivo
@@ -403,7 +458,7 @@ export default function DemandForm() {
             className="text-foreground/90 font-medium flex items-center gap-2"
           >
             <Building2 className="h-4 w-4" />
-            Setor *
+            Setor de Origem *
           </Label>
           <Select
             value={form.watch("department") || undefined}
@@ -419,9 +474,9 @@ export default function DemandForm() {
               <SelectValue placeholder="Informe seu setor" />
             </SelectTrigger>
             <SelectContent>
-              {DEPARTMENTS.map((dep) => (
-                <SelectItem key={dep} value={dep}>
-                  {dep}
+              {departments.map((dep) => (
+                <SelectItem key={dep.id} value={dep.name}>
+                  {dep.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -460,6 +515,7 @@ export default function DemandForm() {
               <SelectItem value="Melhoria">Melhoria</SelectItem>
               <SelectItem value="Ideia">Ideia</SelectItem>
               <SelectItem value="Ajuste">Ajuste</SelectItem>
+              <SelectItem value="Outro">Outro</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -470,7 +526,7 @@ export default function DemandForm() {
             className="text-foreground/90 font-medium flex items-center gap-2"
           >
             <Layers className="h-4 w-4" />
-            Sistema/Área Afetada *
+            Área Afetada *
           </Label>
           <Select
             value={form.watch("system_area")}
@@ -483,13 +539,14 @@ export default function DemandForm() {
             disabled={isPending}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Selecione o sistema/área" />
+              <SelectValue placeholder="Informe a área afetada" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="erp-sistemao">ERP (Sistemão)</SelectItem>
               <SelectItem value="wts-chat">
                 Plataforma de Atendimento (WTS Chat)
               </SelectItem>
+              <SelectItem value="outro">Outro</SelectItem>
             </SelectContent>
           </Select>
           {form.formState.errors.system_area && (
@@ -519,7 +576,7 @@ export default function DemandForm() {
             disabled={isPending}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Selecione o impacto" />
+              <SelectValue placeholder="Selecione o impacto percebido" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Bloqueante">Bloqueante</SelectItem>
@@ -528,6 +585,40 @@ export default function DemandForm() {
               <SelectItem value="Baixo">Baixo</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label
+            htmlFor="destination_department"
+            className="text-foreground/90 font-medium flex items-center gap-2"
+          >
+            <Building2 className="h-4 w-4" />
+            Setor de Destino
+          </Label>
+          <Select
+            value={form.watch("destination_department") || undefined}
+            onValueChange={(value) =>
+              form.setValue(
+                "destination_department",
+                value as DemandFormValues["destination_department"]
+              )
+            }
+            disabled={isPending}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Informe o setor que receberá sua solicitação" />
+            </SelectTrigger>
+            <SelectContent>
+              {departments.map((dep) => (
+                <SelectItem key={dep.id} value={dep.name}>
+                  {dep.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-sm text-muted-foreground/70">
+            Opcional. Selecione o setor responsável por atender esta demanda.
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -620,9 +711,22 @@ export default function DemandForm() {
                   return (
                     <div
                       key={index}
-                      className="relative group border rounded-lg p-2 bg-muted/30"
+                      className="relative group border rounded-lg p-3 bg-muted/30"
                     >
-                      <div className="flex items-start gap-2">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFile(index);
+                        }}
+                        disabled={isPending}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                      <div className="flex flex-col items-center justify-center gap-2 pt-1">
                         <div className="relative flex-shrink-0">
                           {previewUrl ? (
                             <Image
@@ -638,25 +742,12 @@ export default function DemandForm() {
                               <ImageIcon className="h-6 w-6 text-muted-foreground" />
                             </div>
                           )}
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            className="absolute -top-1 -right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeFile(index);
-                            }}
-                            disabled={isPending}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">
+                        <div className="flex flex-col items-center justify-center w-full min-w-0">
+                          <p className="text-xs font-medium truncate w-full text-center">
                             {file.name}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground text-center">
                             {(file.size / 1024).toFixed(2)} KB
                           </p>
                         </div>

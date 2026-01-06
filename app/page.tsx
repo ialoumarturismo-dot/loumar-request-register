@@ -17,8 +17,8 @@ export default function Home() {
               Registrar Demanda
             </CardTitle>
             <CardDescription className="text-muted-foreground/80 mt-1.5">
-              Preencha o formulário abaixo para registrar uma nova demanda ao
-              setor de Tecnologia, IA e Automação.
+              Preencha o formulário abaixo para registrar uma nova demanda à
+              algum setor da empresa.{" "}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-5">

@@ -146,3 +146,624 @@
     font-weight: 600;
   }
 }
+
+/* Custom styles for react-day-picker v9 (compatível com v8) */
+@layer components {
+  /* Base container */
+  .rdp,
+  .rdp-root {
+    --rdp-cell-size: 28px;
+    margin: 0;
+  }
+
+  /* Layout + table defaults */
+  .rdp-months {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .rdp-month {
+    margin: 0;
+  }
+
+  .rdp-table,
+  .rdp-month_grid {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+  }
+
+  .rdp-head_row,
+  .rdp-row,
+  .rdp-weekdays,
+  .rdp-week {
+    display: flex;
+    width: 100%;
+  }
+
+  /* Weekday/Head cell - compatível v8/v9 */
+  .rdp-head_cell,
+  .rdp-weekday {
+    width: var(--rdp-cell-size, 28px);
+    height: calc(var(--rdp-cell-size, 28px) * 0.58);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: hsl(var(--muted-foreground));
+    font-weight: 400;
+    font-size: 0.65rem;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    user-select: none;
+    text-transform: none;
+  }
+
+  .rdp-root .rdp-weekday,
+  .rdp-root .rdp-head_cell {
+    font-weight: 400;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+  }
+
+  .rdp-weekday abbr {
+    font: inherit;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .rdp-cell {
+    width: var(--rdp-cell-size);
+    height: var(--rdp-cell-size);
+    padding: 0;
+    position: relative;
+    text-align: center;
+  }
+
+  /* Reset button */
+  .rdp-button_reset {
+    appearance: none;
+    position: relative;
+    margin: 0;
+    padding: 0;
+    cursor: default;
+    color: inherit;
+    border: none;
+    background-color: transparent;
+    font: inherit;
+  }
+
+  /* Day button base - compatível v8/v9 */
+  .rdp-button,
+  .rdp-day_button {
+    width: var(--rdp-cell-size);
+    height: var(--rdp-cell-size);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    font-weight: 400;
+    font-size: 0.75rem;
+    line-height: 1;
+    color: hsl(var(--foreground));
+    transition: background-color 140ms ease, color 140ms ease,
+      border-color 140ms ease;
+  }
+
+  /* Hover sutil */
+  .rdp-button:hover:not([disabled]),
+  .rdp-day_button:hover:not([disabled]) {
+    background-color: hsl(var(--muted) / 0.48);
+  }
+
+  /* Não cria "bolinha" de hover em dias selecionados / faixa do range */
+  .rdp-selected .rdp-button:hover,
+  .rdp-selected .rdp-day_button:hover,
+  .rdp-range_middle .rdp-button:hover,
+  .rdp-range_middle .rdp-day_button:hover,
+  .rdp-range_start .rdp-button:hover,
+  .rdp-range_start .rdp-day_button:hover,
+  .rdp-range_end .rdp-button:hover,
+  .rdp-range_end .rdp-day_button:hover,
+  .rdp-day_range_middle .rdp-button:hover,
+  .rdp-day_range_middle .rdp-day_button:hover,
+  .rdp-day_range_start .rdp-button:hover,
+  .rdp-day_range_start .rdp-day_button:hover,
+  .rdp-day_range_end .rdp-button:hover,
+  .rdp-day_range_end .rdp-day_button:hover {
+    background-color: transparent;
+  }
+
+  .rdp-button[disabled],
+  .rdp-day_button[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Day wrapper (v9) */
+  .rdp-day {
+    font-weight: 400;
+  }
+
+  /* Range middle - sutil e contínuo */
+  .rdp-day_range_middle:not(.rdp-day_range_start):not(.rdp-day_range_end),
+  .rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end),
+  .rdp-button.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end),
+  .rdp-day_button.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end),
+  .rdp-button.rdp-day_range_middle:not(.rdp-day_range_start):not(
+      .rdp-day_range_end
+    ),
+  .rdp-day_button.rdp-day_range_middle:not(.rdp-day_range_start):not(
+      .rdp-day_range_end
+    ) {
+    background-color: hsl(var(--muted) / 0.38);
+    color: hsl(var(--foreground));
+  }
+
+  /* Garante a faixa no v9 */
+  .rdp-root td.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end) {
+    background-color: hsl(var(--muted) / 0.38);
+  }
+
+  /* Range middle: anula border-radius do botão para faixa contínua */
+  .rdp-day_range_middle:not(.rdp-day_range_start):not(.rdp-day_range_end)
+    .rdp-button,
+  .rdp-day_range_middle:not(.rdp-day_range_start):not(.rdp-day_range_end)
+    .rdp-day_button,
+  .rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end) .rdp-button,
+  .rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end) .rdp-day_button {
+    border-radius: 0;
+  }
+
+  .rdp-day_range_middle:not(.rdp-day_range_start):not(.rdp-day_range_end):hover,
+  .rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end):hover {
+    background-color: hsl(var(--muted) / 0.45);
+  }
+
+  /* Evita "bolinha" no hover dentro do middle */
+  .rdp-day_range_middle:not(.rdp-day_range_start):not(.rdp-day_range_end)
+    .rdp-button:hover,
+  .rdp-day_range_middle:not(.rdp-day_range_start):not(.rdp-day_range_end)
+    .rdp-day_button:hover,
+  .rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end) .rdp-button:hover,
+  .rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end)
+    .rdp-day_button:hover {
+    background-color: transparent;
+  }
+
+  /* Start/end - white + black */
+  .rdp-day_selected:not(.rdp-day_range_middle):not(.rdp-day_range_start):not(
+      .rdp-day_range_end
+    ),
+  .rdp-selected:not(.rdp-range_middle):not(.rdp-range_start):not(
+      .rdp-range_end
+    ) {
+    background-color: hsl(0 0% 100%);
+    color: hsl(0 0% 0%);
+    border-radius: 9999px;
+    font-weight: 500;
+  }
+
+  /* Range start: radius apenas à esquerda */
+  .rdp-day_range_start,
+  .rdp-range_start,
+  .rdp-button.rdp-range_start,
+  .rdp-day_button.rdp-range_start,
+  .rdp-button.rdp-day_range_start,
+  .rdp-day_button.rdp-day_range_start {
+    background-color: hsl(0 0% 100%);
+    color: hsl(0 0% 0%);
+  }
+
+  .rdp-day_range_start .rdp-button,
+  .rdp-day_range_start .rdp-day_button,
+  .rdp-range_start .rdp-button,
+  .rdp-range_start .rdp-day_button {
+    border-top-left-radius: 9999px;
+    border-bottom-left-radius: 9999px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    background-color: hsl(0 0% 100%);
+    color: hsl(0 0% 0%);
+    font-weight: 500;
+  }
+
+  .rdp-button.rdp-range_start,
+  .rdp-day_button.rdp-range_start,
+  .rdp-button.rdp-day_range_start,
+  .rdp-day_button.rdp-day_range_start {
+    border-top-left-radius: 9999px;
+    border-bottom-left-radius: 9999px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    background-color: hsl(0 0% 100%);
+    color: hsl(0 0% 0%);
+    font-weight: 500;
+  }
+
+  /* Range end: radius apenas à direita */
+  .rdp-day_range_end,
+  .rdp-range_end,
+  .rdp-button.rdp-range_end,
+  .rdp-day_button.rdp-range_end,
+  .rdp-button.rdp-day_range_end,
+  .rdp-day_button.rdp-day_range_end {
+    background-color: hsl(0 0% 100%);
+    color: hsl(0 0% 0%);
+  }
+
+  .rdp-day_range_end .rdp-button,
+  .rdp-day_range_end .rdp-day_button,
+  .rdp-range_end .rdp-button,
+  .rdp-range_end .rdp-day_button {
+    border-top-right-radius: 9999px;
+    border-bottom-right-radius: 9999px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    background-color: hsl(0 0% 100%);
+    color: hsl(0 0% 0%);
+    font-weight: 500;
+  }
+
+  .rdp-button.rdp-range_end,
+  .rdp-day_button.rdp-range_end,
+  .rdp-button.rdp-day_range_end,
+  .rdp-day_button.rdp-day_range_end {
+    border-top-right-radius: 9999px;
+    border-bottom-right-radius: 9999px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    background-color: hsl(0 0% 100%);
+    color: hsl(0 0% 0%);
+    font-weight: 500;
+  }
+
+  .rdp-day_selected:not(.rdp-day_range_middle):not(.rdp-day_range_start):not(
+      .rdp-day_range_end
+    ):hover,
+  .rdp-selected:not(.rdp-range_middle):not(.rdp-range_start):not(
+      .rdp-range_end
+    ):hover {
+    background-color: hsl(0 0% 98%);
+  }
+
+  .rdp-day_range_start:hover,
+  .rdp-day_range_end:hover,
+  .rdp-range_start:hover,
+  .rdp-range_end:hover {
+    background-color: hsl(0 0% 98%);
+  }
+
+  .rdp-day_range_start:hover .rdp-button,
+  .rdp-day_range_start:hover .rdp-day_button,
+  .rdp-range_start:hover .rdp-button,
+  .rdp-range_start:hover .rdp-day_button,
+  .rdp-day_range_end:hover .rdp-button,
+  .rdp-day_range_end:hover .rdp-day_button,
+  .rdp-range_end:hover .rdp-button,
+  .rdp-range_end:hover .rdp-day_button {
+    background-color: hsl(0 0% 98%);
+  }
+
+  /* Today - minimalista */
+  .rdp-day_today:not(.rdp-day_selected):not(.rdp-day_range_start):not(
+      .rdp-day_range_end
+    ),
+  .rdp-today:not(.rdp-selected):not(.rdp-range_start):not(.rdp-range_end) {
+    font-weight: 500;
+    background-color: hsl(var(--muted));
+    color: hsl(var(--foreground));
+  }
+
+  /* Outside days */
+  .rdp-day_outside,
+  .rdp-outside {
+    color: hsl(var(--muted-foreground));
+    opacity: 0.5;
+  }
+
+  .rdp-day_outside.rdp-day_selected,
+  .rdp-day_outside.rdp-day_range_start,
+  .rdp-day_outside.rdp-day_range_end,
+  .rdp-outside.rdp-selected,
+  .rdp-outside.rdp-range_start,
+  .rdp-outside.rdp-range_end {
+    background-color: hsl(var(--muted));
+    opacity: 0.3;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Disabled days */
+  .rdp-day_disabled,
+  .rdp-disabled {
+    color: hsl(var(--muted-foreground));
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+/* RDP v9 hard overrides (fora de @layer) */
+.rdp-root th.rdp-weekday,
+.rdp-root th.rdp-head_cell {
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+  user-select: none;
+  text-transform: none;
+}
+
+.rdp-root th.rdp-weekday abbr {
+  font: inherit;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Range middle: faixa sutil e contínua via pseudo-element */
+.rdp-root td.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end) {
+  position: relative;
+}
+
+.rdp-root
+  td.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: hsl(var(--muted) / 0.99);
+  border-radius: 0;
+  pointer-events: none;
+}
+
+.rdp-root
+  td.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end)
+  .rdp-day_button,
+.rdp-root
+  td.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end)
+  .rdp-button {
+  position: relative;
+  z-index: 1;
+}
+
+/* Hover sutil */
+.rdp-root button.rdp-day_button,
+.rdp-root button.rdp-button {
+  position: relative;
+  width: var(--rdp-cell-size, 28px);
+  height: var(--rdp-cell-size, 28px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 1px;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-color: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: 1;
+  font-weight: inherit;
+  box-shadow: inset 0 0 0 0 transparent;
+  transition: background-color 140ms ease, color 140ms ease,
+    border-color 140ms ease, box-shadow 140ms ease;
+}
+
+/* Start/end devem ter peso um pouco maior */
+.rdp-root td.rdp-selected:not(.rdp-range_middle) button.rdp-day_button,
+.rdp-root td.rdp-selected:not(.rdp-range_middle) button.rdp-button,
+.rdp-root td.rdp-range_start button.rdp-day_button,
+.rdp-root td.rdp-range_start button.rdp-button,
+.rdp-root td.rdp-range_end button.rdp-day_button,
+.rdp-root td.rdp-range_end button.rdp-button {
+  font-weight: 500;
+}
+
+/* Start/end (LIGHT): círculo preto + texto branco */
+.rdp-root td.rdp-range_start button.rdp-day_button,
+.rdp-root td.rdp-range_start button.rdp-button,
+.rdp-root td.rdp-range_end button.rdp-day_button,
+.rdp-root td.rdp-range_end button.rdp-button,
+.rdp-root
+  td.rdp-selected:not(.rdp-range_middle):not(.rdp-range_start):not(
+    .rdp-range_end
+  )
+  button.rdp-day_button,
+.rdp-root
+  td.rdp-selected:not(.rdp-range_middle):not(.rdp-range_start):not(
+    .rdp-range_end
+  )
+  button.rdp-button,
+.rdp-root td.rdp-day_range_start button.rdp-day_button,
+.rdp-root td.rdp-day_range_start button.rdp-button,
+.rdp-root td.rdp-day_range_end button.rdp-day_button,
+.rdp-root td.rdp-day_range_end button.rdp-button {
+  background-color: hsl(0 0% 0%);
+  color: hsl(0 0% 100%);
+  border-radius: 9999px;
+}
+
+/* Start/end (DARK): mantém o visual atual (círculo branco + texto preto) */
+.dark .rdp-root td.rdp-range_start button.rdp-day_button,
+.dark .rdp-root td.rdp-range_start button.rdp-button,
+.dark .rdp-root td.rdp-range_end button.rdp-day_button,
+.dark .rdp-root td.rdp-range_end button.rdp-button,
+.dark
+  .rdp-root
+  td.rdp-selected:not(.rdp-range_middle):not(.rdp-range_start):not(
+    .rdp-range_end
+  )
+  button.rdp-day_button,
+.dark
+  .rdp-root
+  td.rdp-selected:not(.rdp-range_middle):not(.rdp-range_start):not(
+    .rdp-range_end
+  )
+  button.rdp-button,
+.dark .rdp-root td.rdp-day_range_start button.rdp-day_button,
+.dark .rdp-root td.rdp-day_range_start button.rdp-button,
+.dark .rdp-root td.rdp-day_range_end button.rdp-day_button,
+.dark .rdp-root td.rdp-day_range_end button.rdp-button {
+  background-color: hsl(0 0% 100%);
+  color: hsl(0 0% 0%);
+}
+
+/* Range middle: remove radius do botão para faixa "reta" */
+.rdp-root
+  td.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end)
+  button.rdp-day_button,
+.rdp-root
+  td.rdp-range_middle:not(.rdp-range_start):not(.rdp-range_end)
+  button.rdp-button {
+  border-radius: 0;
+}
+
+/* Caso especial: range de 1 dia (start=end) deve ficar "bolinha" completa */
+.rdp-root td.rdp-range_start.rdp-range_end button.rdp-day_button,
+.rdp-root td.rdp-range_start.rdp-range_end button.rdp-button {
+  border-radius: 9999px;
+}
+
+.rdp-root
+  td:not(.rdp-selected):not(.rdp-range_middle):not(.rdp-range_start):not(
+    .rdp-range_end
+  )
+  .rdp-day_button:hover:not([disabled]),
+.rdp-root
+  td:not(.rdp-selected):not(.rdp-range_middle):not(.rdp-range_start):not(
+    .rdp-range_end
+  )
+  .rdp-button:hover:not([disabled]) {
+  background-color: hsl(var(--muted) / 0.36);
+  box-shadow: inset 0 0 0 1px hsl(0 0% 0% / 0.55);
+}
+
+/* Hover ring (DARK) */
+.dark
+  .rdp-root
+  td:not(.rdp-selected):not(.rdp-range_middle):not(.rdp-range_start):not(
+    .rdp-range_end
+  )
+  .rdp-day_button:hover:not([disabled]),
+.dark
+  .rdp-root
+  td:not(.rdp-selected):not(.rdp-range_middle):not(.rdp-range_start):not(
+    .rdp-range_end
+  )
+  .rdp-button:hover:not([disabled]) {
+  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.7);
+}
+
+/* Today indicator: dot abaixo do número */
+.rdp-root
+  td.rdp-today:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-day_button:not([disabled])::after,
+.rdp-root
+  td.rdp-today:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-button:not([disabled])::after,
+.rdp-root
+  td.rdp-day_today:not(.rdp-day_outside):not(.rdp-day_disabled)
+  button.rdp-day_button:not([disabled])::after,
+.rdp-root
+  td.rdp-day_today:not(.rdp-day_outside):not(.rdp-day_disabled)
+  button.rdp-button:not([disabled])::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background-color: hsl(0 0% 0%);
+  pointer-events: none;
+}
+
+/* LIGHT: se "Hoje" estiver selecionado, dot branco */
+.rdp-root
+  td.rdp-today.rdp-selected:not(.rdp-range_middle):not(.rdp-outside):not(
+    .rdp-disabled
+  )
+  button.rdp-day_button:not([disabled])::after,
+.rdp-root
+  td.rdp-today.rdp-selected:not(.rdp-range_middle):not(.rdp-outside):not(
+    .rdp-disabled
+  )
+  button.rdp-button:not([disabled])::after,
+.rdp-root
+  td.rdp-today.rdp-range_start:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-day_button:not([disabled])::after,
+.rdp-root
+  td.rdp-today.rdp-range_start:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-button:not([disabled])::after,
+.rdp-root
+  td.rdp-today.rdp-range_end:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-day_button:not([disabled])::after,
+.rdp-root
+  td.rdp-today.rdp-range_end:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-button:not([disabled])::after,
+.rdp-root
+  td.rdp-day_today.rdp-day_selected:not(.rdp-day_outside):not(.rdp-day_disabled)
+  button.rdp-day_button:not([disabled])::after,
+.rdp-root
+  td.rdp-day_today.rdp-day_selected:not(.rdp-day_outside):not(.rdp-day_disabled)
+  button.rdp-button:not([disabled])::after {
+  background-color: hsl(0 0% 100%);
+}
+
+/* Dark mode: mantém legibilidade do dot */
+.dark
+  .rdp-root
+  td.rdp-today:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-day_button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-today:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-day_today:not(.rdp-day_outside):not(.rdp-day_disabled)
+  button.rdp-day_button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-day_today:not(.rdp-day_outside):not(.rdp-day_disabled)
+  button.rdp-button:not([disabled])::after {
+  background-color: hsl(0 0% 100% / 0.85);
+}
+
+/* Se "Hoje" estiver selecionado (start/end/single), o dot deve ficar preto */
+.dark
+  .rdp-root
+  td.rdp-today.rdp-selected:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-day_button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-today.rdp-selected:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-today.rdp-range_start:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-day_button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-today.rdp-range_start:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-today.rdp-range_end:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-day_button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-today.rdp-range_end:not(.rdp-outside):not(.rdp-disabled)
+  button.rdp-button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-day_today.rdp-day_selected:not(.rdp-day_outside):not(.rdp-day_disabled)
+  button.rdp-day_button:not([disabled])::after,
+.dark
+  .rdp-root
+  td.rdp-day_today.rdp-day_selected:not(.rdp-day_outside):not(.rdp-day_disabled)
+  button.rdp-button:not([disabled])::after {
+  background-color: hsl(0 0% 0%);
+}

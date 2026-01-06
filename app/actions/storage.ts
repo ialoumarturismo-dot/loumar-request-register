@@ -49,6 +49,31 @@ export async function getSignedAttachmentUrl(
       .replace(/\/+/g, "/")
       .replace(/^\/|\/$/g, "");
 
+    // Extrair demandId do path (formato: {demandId}/{filename})
+    const pathParts = normalizedPath.split("/");
+    if (pathParts.length < 2) {
+      return {
+        ok: false,
+        error: "Caminho do arquivo inválido (formato esperado: demandId/filename)",
+      };
+    }
+
+    const demandId = pathParts[0];
+
+    // Validar acesso à demanda (RLS garante que apenas usuários autorizados veem)
+    const { data: demand, error: demandError } = await supabase
+      .from("demands")
+      .select("id")
+      .eq("id", demandId)
+      .single();
+
+    if (demandError || !demand) {
+      return {
+        ok: false,
+        error: "Demanda não encontrada ou sem permissão de acesso",
+      };
+    }
+
     // Usar admin client para criar signed URL (bypassa RLS)
     // Isso garante que funcionará mesmo se as políticas de storage não estiverem configuradas corretamente
     const adminClient = createAdminClient();

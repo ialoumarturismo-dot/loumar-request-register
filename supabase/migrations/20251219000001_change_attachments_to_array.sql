@@ -3,12 +3,22 @@
 ALTER TABLE public.demands
 ADD COLUMN IF NOT EXISTS attachment_urls TEXT[] DEFAULT '{}';
 
--- Migrate existing data from attachment_url to attachment_urls
-UPDATE public.demands
-SET attachment_urls = CASE 
-  WHEN attachment_url IS NOT NULL AND attachment_url != '' THEN ARRAY[attachment_url]
-  ELSE '{}'::TEXT[]
-END;
+-- Migrate existing data from attachment_url to attachment_urls (if column exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'demands' 
+    AND column_name = 'attachment_url'
+  ) THEN
+    UPDATE public.demands
+    SET attachment_urls = CASE 
+      WHEN attachment_url IS NOT NULL AND attachment_url != '' THEN ARRAY[attachment_url]
+      ELSE '{}'::TEXT[]
+    END;
+  END IF;
+END $$;
 
 -- Drop the old column
 ALTER TABLE public.demands
