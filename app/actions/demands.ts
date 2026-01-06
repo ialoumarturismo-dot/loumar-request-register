@@ -38,15 +38,36 @@ const normalizeUrl = (url: string): string => {
   return trimmed;
 };
 
+const departmentNameSchema = z.string().min(2, "Setor deve ter pelo menos 2 caracteres").max(100);
+
+async function assertDepartmentsExist(
+  admin: ReturnType<typeof createAdminClient>,
+  names: string[]
+) {
+  const unique = Array.from(new Set(names.map((n) => n.trim()).filter(Boolean)));
+  if (unique.length === 0) return;
+
+  const { data, error } = await admin.from("departments").select("name").in("name", unique);
+  if (error) {
+    throw new Error(`Erro ao validar setores: ${error.message}`);
+  }
+
+  const allowed = new Set((data || []).map((d) => d.name));
+  const invalid = unique.filter((n) => !allowed.has(n));
+  if (invalid.length > 0) {
+    throw new Error(`Setor(es) inválido(s): ${invalid.join(", ")}`);
+  }
+}
+
 // Schema de validação para criação de demanda
 const createDemandSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-  department: z.string().min(2, "Setor deve ter pelo menos 2 caracteres"),
+  department: departmentNameSchema,
   demand_type: z.enum(["Bug", "Melhoria", "Ideia", "Ajuste", "Outro"]),
   system_area: z
     .string()
     .min(2, "Sistema/área deve ter pelo menos 2 caracteres"),
-  impact_level: z.enum(["Bloqueante", "Alto", "Médio", "Baixo"]),
+  impact_level: z.enum(["Bloqueante", "Alto", "Médio", "Baixo", "Outro"]),
   description: z
     .string()
     .min(10, "Descrição deve ter pelo menos 10 caracteres"),
@@ -59,7 +80,7 @@ const createDemandSchema = z.object({
     )
     .optional()
     .default([]),
-  destination_department: z.enum(["Manutenção", "TI", "Outro"]).optional(),
+  destination_department: departmentNameSchema.optional(),
 });
 
 type CreateDemandInput = z.infer<typeof createDemandSchema>;
@@ -116,6 +137,19 @@ export async function createDemand(formData: FormData) {
     }
 
     const validatedData = validation.data;
+    // Validate departments against current departments table (dynamic list)
+    try {
+      const admin = createAdminClient();
+      await assertDepartmentsExist(admin, [
+        validatedData.department,
+        ...(validatedData.destination_department ? [validatedData.destination_department] : []),
+      ]);
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Setores inválidos",
+      };
+    }
 
     // Gerar ID da demanda antes do upload (para organizar arquivos)
     const demandId = randomUUID();

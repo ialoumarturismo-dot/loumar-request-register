@@ -5,27 +5,68 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
+const departmentNameSchema = z.string().min(1, "Departamento inválido").max(100);
+
 // Schema para criar usuário
-const createUserSchema = z.object({
-  email: z.string().email("Email inválido"),
-  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
-  displayName: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-  role: z.enum(["admin", "sector_user"]),
-  departments: z.array(z.enum(["Manutenção", "TI"])).min(1, "Selecione pelo menos um departamento"),
-  whatsappPhone: z.string().optional(),
-  whatsappOptIn: z.boolean().default(false),
-});
+const createUserSchema = z
+  .object({
+    email: z.string().email("Email inválido"),
+    password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+    displayName: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+    role: z.enum(["admin", "sector_user"]),
+    departments: z.array(departmentNameSchema).default([]),
+    whatsappPhone: z.string().optional(),
+    whatsappOptIn: z.boolean().default(false),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role === "sector_user" && data.departments.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["departments"],
+        message: "Selecione pelo menos um departamento",
+      });
+    }
+  });
 
 // Schema para atualizar usuário
-const updateUserSchema = z.object({
-  userId: z.string().uuid(),
-  displayName: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").optional(),
-  role: z.enum(["admin", "sector_user"]).optional(),
-  departments: z.array(z.enum(["Manutenção", "TI"])).optional(),
-  whatsappPhone: z.string().optional(),
-  whatsappOptIn: z.boolean().optional(),
-  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").optional(),
-});
+const updateUserSchema = z
+  .object({
+    userId: z.string().uuid(),
+    displayName: z.string().min(2, "Nome deve ter pelo menos 2 caracteres").optional(),
+    role: z.enum(["admin", "sector_user"]).optional(),
+    departments: z.array(departmentNameSchema).optional(),
+    whatsappPhone: z.string().optional(),
+    whatsappOptIn: z.boolean().optional(),
+    password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").optional(),
+  })
+  .superRefine((data, ctx) => {
+    // If explicitly setting role to sector_user, require departments to be provided (and non-empty)
+    if (data.role === "sector_user" && (!data.departments || data.departments.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["departments"],
+        message: "Selecione pelo menos um departamento",
+      });
+    }
+  });
+
+async function assertDepartmentsExist(
+  admin: ReturnType<typeof createAdminClient>,
+  names: string[]
+) {
+  if (names.length === 0) return;
+
+  const { data, error } = await admin.from("departments").select("name").in("name", names);
+  if (error) {
+    throw new Error(`Erro ao validar setores: ${error.message}`);
+  }
+
+  const allowed = new Set((data || []).map((d) => d.name));
+  const invalid = names.filter((n) => !allowed.has(n));
+  if (invalid.length > 0) {
+    throw new Error(`Setor(es) inválido(s): ${invalid.join(", ")}`);
+  }
+}
 
 /**
  * Server Action: Obter perfil do usuário logado
@@ -181,6 +222,15 @@ export async function createManagedUser(
     }
 
     const admin = createAdminClient();
+    // Validate departments against current departments table (dynamic list)
+    try {
+      await assertDepartmentsExist(admin, validation.data.departments);
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "Setores inválidos",
+      };
+    }
 
     // Criar usuário no auth
     const { data: authData, error: authCreateError } = await admin.auth.admin.createUser({
@@ -360,6 +410,12 @@ export async function updateManagedUser(
 
     const admin = createAdminClient();
 
+    // If role is explicitly set to admin, clear existing departments/responsibles
+    if (validation.data.role === "admin") {
+      await admin.from("user_departments").delete().eq("user_id", userId);
+      await admin.from("department_responsibles").delete().eq("user_id", userId);
+    }
+
     // Atualizar senha se fornecida
     if (validation.data.password) {
       const { error: passwordError } = await admin.auth.admin.updateUserById(userId, {
@@ -415,6 +471,16 @@ export async function updateManagedUser(
 
     // Atualizar departamentos se fornecidos
     if (validation.data.departments) {
+      // Validate departments against current departments table (dynamic list)
+      try {
+        await assertDepartmentsExist(admin, validation.data.departments);
+      } catch (e) {
+        return {
+          ok: false,
+          error: e instanceof Error ? e.message : "Setores inválidos",
+        };
+      }
+
       // Buscar departamentos atuais antes de deletar
       const { data: currentDepts } = await admin
         .from("user_departments")
@@ -423,7 +489,7 @@ export async function updateManagedUser(
 
       const currentDeptNames = currentDepts?.map((d) => d.department) || [];
       const newDeptNames = validation.data.departments;
-      const removedDepts = currentDeptNames.filter((d) => !newDeptNames.includes(d as "Manutenção" | "TI"));
+      const removedDepts = currentDeptNames.filter((d) => !newDeptNames.includes(d));
 
       // Deletar departamentos existentes
       await admin.from("user_departments").delete().eq("user_id", userId);
