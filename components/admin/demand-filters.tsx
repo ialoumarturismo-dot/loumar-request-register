@@ -24,7 +24,7 @@ export interface FilterValues {
   dateRange: { from: Date | null; to: Date | null } | null;
 }
 
-type ViewMode = "kanban" | "list";
+type ViewMode = "kanban" | "list" | "cards";
 
 interface DemandFiltersProps {
   filters: FilterValues;

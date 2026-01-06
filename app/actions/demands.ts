@@ -1415,7 +1415,7 @@ export async function getDemandEvents(
     }
 
     // Buscar nomes dos autores
-    const authorIds = [...new Set((events || []).map((e) => e.author_user_id))];
+    const authorIds = Array.from(new Set((events || []).map((e) => e.author_user_id)));
     const { data: authors } = await supabase
       .from("profiles")
       .select("id, display_name")
