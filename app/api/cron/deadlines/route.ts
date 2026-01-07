@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDeadlineSoonNotification } from "@/app/actions/notifications";
 
+// Força a rota a ser dinâmica (necessário para cron jobs)
+export const dynamic = 'force-dynamic';
+
 /**
  * Cron endpoint para verificar deadlines próximas e enviar notificações
  * Protegido por CRON_SECRET

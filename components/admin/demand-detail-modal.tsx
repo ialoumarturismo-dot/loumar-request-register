@@ -42,7 +42,6 @@ import {
   X,
   MessageSquare,
   Waypoints,
-  ClockCheck,
   Settings,
   Link2,
 } from "lucide-react";
@@ -117,6 +116,7 @@ export default function DemandDetailModal({
     demand?.due_at ? new Date(demand.due_at) : null
   );
   const [sectorComment, setSectorComment] = useState("");
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
 
   // Carregar usuários ao montar componente
   useEffect(() => {
@@ -334,6 +334,59 @@ export default function DemandDetailModal({
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">
+                  Status Operacional
+                </Label>
+                <StatusSelect
+                  demandId={demand.id}
+                  currentStatus={demand.status}
+                  onUpdate={onDemandUpdate}
+                  onRollback={onDemandRollback}
+                  getDemandById={getDemandById}
+                  onSuccess={onRefresh}
+                />
+              </div>
+              {userRole === "admin" && (
+                <div className="space-y-1 w-[220px]">
+                  <Label className="text-[11px] text-muted-foreground">
+                    Prazo de Conclusão
+                  </Label>
+                  <DatePicker
+                    value={dueAt}
+                    onChange={async (newDate) => {
+                      const previousDueAt = dueAt;
+                      setDueAt(newDate);
+
+                      // Comparar timestamps para verificar se realmente mudou
+                      const previousTime = previousDueAt?.getTime() ?? null;
+                      const newTime = newDate?.getTime() ?? null;
+
+                      if (previousTime !== newTime) {
+                        startTransition(async () => {
+                          const result = await setDemandDeadline(
+                            demand.id,
+                            newDate ? newDate.toISOString() : null
+                          );
+                          if (result.ok) {
+                            toast.success("Prazo atualizado");
+                            setTimelineRefreshKey((prev) => prev + 1);
+                            onRefresh?.();
+                          } else {
+                            toast.error("Erro ao atualizar prazo", {
+                              description: result.error,
+                            });
+                            // Reverter para o valor anterior em caso de erro
+                            setDueAt(previousDueAt);
+                          }
+                        });
+                      }
+                    }}
+                    disabled={isPending}
+                    placeholder="Selecione uma data"
+                  />
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">
                   Etiquetas
                 </Label>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -356,19 +409,6 @@ export default function DemandDetailModal({
                     {demand.impact_level}
                   </Badge>
                 </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">
-                  Status Operacional
-                </Label>
-                <StatusSelect
-                  demandId={demand.id}
-                  currentStatus={demand.status}
-                  onUpdate={onDemandUpdate}
-                  onRollback={onDemandRollback}
-                  getDemandById={getDemandById}
-                  onSuccess={onRefresh}
-                />
               </div>
             </div>
           </section>
@@ -515,6 +555,7 @@ export default function DemandDetailModal({
                       if (result.ok) {
                         toast.success("Comentário adicionado");
                         setSectorComment("");
+                        setTimelineRefreshKey((prev) => prev + 1);
                         onRefresh?.();
                       } else {
                         toast.error("Erro ao adicionar comentário", {
@@ -537,7 +578,10 @@ export default function DemandDetailModal({
               <Waypoints className="h-4 w-4 text-muted-foreground" />
               Timeline de Atualizações
             </div>
-            <DemandTimeline demandId={demand.id} />
+            <DemandTimeline
+              demandId={demand.id}
+              refreshKey={timelineRefreshKey}
+            />
           </section>
 
           {/* Comentário do gestor ao responsável (apenas admin pode escrever) */}
@@ -572,6 +616,7 @@ export default function DemandDetailModal({
                       if (result.ok) {
                         toast.success("Comentário enviado");
                         setManagerComment("");
+                        setTimelineRefreshKey((prev) => prev + 1);
                         onRefresh?.();
                       } else {
                         toast.error("Erro ao enviar comentário", {
@@ -583,48 +628,6 @@ export default function DemandDetailModal({
                   disabled={isPending || !managerComment.trim()}
                 >
                   Enviar Comentário
-                </Button>
-              </div>
-            </section>
-          )}
-
-          {/* Prazo (apenas admin) */}
-          {userRole === "admin" && (
-            <section className="rounded-lg border border-border/40 bg-muted/30 p-3">
-              <div className="text-[11px] font-medium text-muted-foreground mb-2 flex items-center gap-2 tracking-wide">
-                <ClockCheck className="h-4 w-4 text-muted-foreground" />
-                Prazo de Conclusão
-              </div>
-              <div className="space-y-2">
-                <DatePicker
-                  value={dueAt}
-                  onChange={setDueAt}
-                  disabled={isPending}
-                  placeholder="Selecione uma data"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    startTransition(async () => {
-                      const result = await setDemandDeadline(
-                        demand.id,
-                        dueAt ? dueAt.toISOString() : null
-                      );
-                      if (result.ok) {
-                        toast.success("Prazo atualizado");
-                        onRefresh?.();
-                      } else {
-                        toast.error("Erro ao atualizar prazo", {
-                          description: result.error,
-                        });
-                      }
-                    });
-                  }}
-                  disabled={isPending}
-                >
-                  Salvar Prazo
                 </Button>
               </div>
             </section>

@@ -83,7 +83,7 @@ export default function StatusSelect({
       onValueChange={handleStatusChange}
       disabled={isDisabled}
     >
-      <SelectTrigger className="w-[160px] h-8 text-xs pr-7 relative">
+      <SelectTrigger className="w-[160px] h-9 text-xs pr-7 relative">
         <SelectValue />
         {isDisabled ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin absolute right-2 text-muted-foreground" />

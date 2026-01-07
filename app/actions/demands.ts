@@ -38,16 +38,24 @@ const normalizeUrl = (url: string): string => {
   return trimmed;
 };
 
-const departmentNameSchema = z.string().min(2, "Setor deve ter pelo menos 2 caracteres").max(100);
+const departmentNameSchema = z
+  .string()
+  .min(2, "Setor deve ter pelo menos 2 caracteres")
+  .max(100);
 
 async function assertDepartmentsExist(
   admin: ReturnType<typeof createAdminClient>,
   names: string[]
 ) {
-  const unique = Array.from(new Set(names.map((n) => n.trim()).filter(Boolean)));
+  const unique = Array.from(
+    new Set(names.map((n) => n.trim()).filter(Boolean))
+  );
   if (unique.length === 0) return;
 
-  const { data, error } = await admin.from("departments").select("name").in("name", unique);
+  const { data, error } = await admin
+    .from("departments")
+    .select("name")
+    .in("name", unique);
   if (error) {
     throw new Error(`Erro ao validar setores: ${error.message}`);
   }
@@ -94,7 +102,9 @@ export async function createDemand(formData: FormData) {
     const system_area = formData.get("system_area") as string;
     const impact_level = formData.get("impact_level") as string;
     const description = formData.get("description") as string;
-    const destination_department = formData.get("destination_department") as string | null;
+    const destination_department = formData.get("destination_department") as
+      | string
+      | null;
     const referenceLinksJson = formData.get("reference_links") as string | null;
 
     // Extrair múltiplos arquivos
@@ -142,7 +152,9 @@ export async function createDemand(formData: FormData) {
       const admin = createAdminClient();
       await assertDepartmentsExist(admin, [
         validatedData.department,
-        ...(validatedData.destination_department ? [validatedData.destination_department] : []),
+        ...(validatedData.destination_department
+          ? [validatedData.destination_department]
+          : []),
       ]);
     } catch (e) {
       return {
@@ -240,8 +252,11 @@ export async function createDemand(formData: FormData) {
       // Roteamento: encontrar responsável default para o setor de destino
       let assignedToUserId: string | null = null;
       if (validatedData.destination_department) {
-        console.log("[createDemand] Buscando responsável para departamento:", validatedData.destination_department);
-        
+        console.log(
+          "[createDemand] Buscando responsável para departamento:",
+          validatedData.destination_department
+        );
+
         // Primeiro, tentar buscar responsável default em department_responsibles
         const { data: responsible, error: respError } = await supabase
           .from("department_responsibles")
@@ -252,15 +267,23 @@ export async function createDemand(formData: FormData) {
           .maybeSingle();
 
         if (respError) {
-          console.error("[createDemand] Erro ao buscar responsável:", respError);
+          console.error(
+            "[createDemand] Erro ao buscar responsável:",
+            respError
+          );
         }
 
         if (responsible) {
           assignedToUserId = responsible.user_id;
-          console.log("[createDemand] Responsável encontrado em department_responsibles:", assignedToUserId);
+          console.log(
+            "[createDemand] Responsável encontrado em department_responsibles:",
+            assignedToUserId
+          );
         } else {
           // Fallback: buscar primeiro usuário do departamento em user_departments
-          console.log("[createDemand] Nenhum responsável default encontrado, buscando em user_departments...");
+          console.log(
+            "[createDemand] Nenhum responsável default encontrado, buscando em user_departments..."
+          );
           const { data: userDept, error: userDeptError } = await supabase
             .from("user_departments")
             .select("user_id")
@@ -269,13 +292,19 @@ export async function createDemand(formData: FormData) {
             .maybeSingle();
 
           if (userDeptError) {
-            console.error("[createDemand] Erro ao buscar usuário do departamento:", userDeptError);
+            console.error(
+              "[createDemand] Erro ao buscar usuário do departamento:",
+              userDeptError
+            );
           }
 
           if (userDept) {
             assignedToUserId = userDept.user_id;
-            console.log("[createDemand] Usuário encontrado em user_departments (fallback):", assignedToUserId);
-            
+            console.log(
+              "[createDemand] Usuário encontrado em user_departments (fallback):",
+              assignedToUserId
+            );
+
             // Criar registro em department_responsibles para próxima vez (opcional, não bloqueia)
             // Usar admin client pois RLS pode bloquear
             try {
@@ -287,15 +316,24 @@ export async function createDemand(formData: FormData) {
                   user_id: assignedToUserId,
                   is_default: true,
                 });
-              
+
               if (insertError) {
-                console.error("[createDemand] Erro ao criar registro em department_responsibles (não crítico):", insertError);
+                console.error(
+                  "[createDemand] Erro ao criar registro em department_responsibles (não crítico):",
+                  insertError
+                );
               }
             } catch (err) {
-              console.error("[createDemand] Erro ao criar registro em department_responsibles (não crítico):", err);
+              console.error(
+                "[createDemand] Erro ao criar registro em department_responsibles (não crítico):",
+                err
+              );
             }
           } else {
-            console.log("[createDemand] Nenhum usuário encontrado para departamento:", validatedData.destination_department);
+            console.log(
+              "[createDemand] Nenhum usuário encontrado para departamento:",
+              validatedData.destination_department
+            );
           }
         }
       }
@@ -334,7 +372,7 @@ export async function createDemand(formData: FormData) {
       // Buscar um perfil admin para usar como autor do evento (ou criar sem autor)
       const admin = createAdminClient();
       let adminProfile: { id: string; display_name: string } | null = null;
-      
+
       try {
         const { data: profileData } = await admin
           .from("profiles")
@@ -342,7 +380,7 @@ export async function createDemand(formData: FormData) {
           .eq("role", "admin")
           .limit(1)
           .maybeSingle();
-        
+
         adminProfile = profileData;
       } catch (err) {
         console.error("[createDemand] Erro ao buscar perfil admin:", err);
@@ -350,14 +388,16 @@ export async function createDemand(formData: FormData) {
 
       if (adminProfile) {
         try {
-          const { error: eventError } = await admin.from("demand_events").insert({
-            demand_id: demandId,
-            author_user_id: adminProfile.id,
-            event_type: "status_change",
-            body: `Demanda criada via formulário público`,
-            visibility: "manager_only",
-          });
-          
+          const { error: eventError } = await admin
+            .from("demand_events")
+            .insert({
+              demand_id: demandId,
+              author_user_id: adminProfile.id,
+              event_type: "created",
+              body: `Demanda criada via formulário público`,
+              visibility: "manager_only",
+            });
+
           if (eventError) {
             console.error("[createDemand] Erro ao criar evento:", eventError);
           }
@@ -368,14 +408,26 @@ export async function createDemand(formData: FormData) {
 
       // Disparar notificação WhatsApp se houver responsável atribuído
       if (assignedToUserId && validatedData.destination_department) {
-        console.log("[createDemand] Disparando notificação para usuário:", assignedToUserId, "demanda:", demandId);
+        console.log(
+          "[createDemand] Disparando notificação para usuário:",
+          assignedToUserId,
+          "demanda:",
+          demandId
+        );
         // Importar função de notificação (será criada abaixo)
-        const { sendDemandCreatedNotification } = await import("./notifications");
+        const { sendDemandCreatedNotification } = await import(
+          "./notifications"
+        );
         await sendDemandCreatedNotification(demandId, assignedToUserId).catch(
           (err) => console.error("[createDemand] Notification error:", err)
         );
       } else {
-        console.log("[createDemand] Notificação não disparada - assignedToUserId:", assignedToUserId, "destination_department:", validatedData.destination_department);
+        console.log(
+          "[createDemand] Notificação não disparada - assignedToUserId:",
+          assignedToUserId,
+          "destination_department:",
+          validatedData.destination_department
+        );
       }
 
       return {
@@ -570,9 +622,12 @@ export async function updateDemandStatus(
           body: `Status alterado de "${currentDemand.status}" para "${validation.data.status}"`,
           visibility: "manager_only",
         });
-        
+
         if (eventError) {
-          console.error("Erro ao criar evento de mudança de status:", eventError);
+          console.error(
+            "Erro ao criar evento de mudança de status:",
+            eventError
+          );
         }
       } catch (err) {
         console.error("Erro ao criar evento de mudança de status:", err);
@@ -669,19 +724,27 @@ export async function updateAdminStatus(
     }
 
     // Registrar evento se admin_status mudou
-    if (currentDemand && currentDemand.admin_status !== validation.data.admin_status) {
+    if (
+      currentDemand &&
+      currentDemand.admin_status !== validation.data.admin_status
+    ) {
       try {
         const admin = createAdminClient();
         const { error: eventError } = await admin.from("demand_events").insert({
           demand_id: demandId,
           author_user_id: user.id,
           event_type: "status_change",
-          body: `Status administrativo alterado de "${currentDemand.admin_status || "N/A"}" para "${validation.data.admin_status}"`,
+          body: `Status administrativo alterado de "${
+            currentDemand.admin_status || "N/A"
+          }" para "${validation.data.admin_status}"`,
           visibility: "manager_only",
         });
-        
+
         if (eventError) {
-          console.error("Erro ao criar evento de mudança de admin_status:", eventError);
+          console.error(
+            "Erro ao criar evento de mudança de admin_status:",
+            eventError
+          );
         }
       } catch (err) {
         console.error("Erro ao criar evento de mudança de admin_status:", err);
@@ -874,12 +937,17 @@ export async function updatePriority(
           demand_id: demandId,
           author_user_id: user.id,
           event_type: "status_change",
-          body: `Prioridade alterada de "${currentDemand.priority || "N/A"}" para "${validation.data.priority}"`,
+          body: `Prioridade alterada de "${
+            currentDemand.priority || "N/A"
+          }" para "${validation.data.priority}"`,
           visibility: "manager_only",
         });
-        
+
         if (eventError) {
-          console.error("Erro ao criar evento de mudança de prioridade:", eventError);
+          console.error(
+            "Erro ao criar evento de mudança de prioridade:",
+            eventError
+          );
         }
       } catch (err) {
         console.error("Erro ao criar evento de mudança de prioridade:", err);
@@ -1094,10 +1162,12 @@ export async function assignDemand(
 
     // Disparar notificação se atribuído a um usuário
     if (userId) {
-      const { sendDemandAssignedNotification } = await import("./notifications");
+      const { sendDemandAssignedNotification } = await import(
+        "./notifications"
+      );
       // Passar user.id do admin que atribuiu
-      await sendDemandAssignedNotification(demandId, userId, user.id).catch((err) =>
-        console.error("Notification error:", err)
+      await sendDemandAssignedNotification(demandId, userId, user.id).catch(
+        (err) => console.error("Notification error:", err)
       );
     }
 
@@ -1125,7 +1195,11 @@ export async function setDemandStatus(
     const supabase = await createClient();
 
     // Validar status
-    if (!["Recebido", "Em análise", "Em execução", "Concluído"].includes(newStatus)) {
+    if (
+      !["Recebido", "Em análise", "Em execução", "Concluído"].includes(
+        newStatus
+      )
+    ) {
       return {
         ok: false,
         error: "Status inválido",
@@ -1285,7 +1359,9 @@ export async function addManagerComment(
 
     // Disparar WhatsApp se houver responsável atribuído
     if (demand.assigned_to_user_id) {
-      const { sendManagerCommentNotification } = await import("./notifications");
+      const { sendManagerCommentNotification } = await import(
+        "./notifications"
+      );
       await sendManagerCommentNotification(
         demandId,
         demand.assigned_to_user_id,
@@ -1402,9 +1478,7 @@ export async function setDemandDeadline(
 /**
  * Server Action: Buscar eventos da timeline de uma demanda
  */
-export async function getDemandEvents(
-  demandId: string
-): Promise<
+export async function getDemandEvents(demandId: string): Promise<
   | {
       ok: true;
       data: Array<{
@@ -1449,24 +1523,39 @@ export async function getDemandEvents(
     }
 
     // Buscar nomes dos autores
-    const authorIds = Array.from(new Set((events || []).map((e) => e.author_user_id)));
-    const { data: authors } = await supabase
-      .from("profiles")
-      .select("id, display_name")
-      .in("id", authorIds);
-
-    const authorsMap = new Map(
-      (authors || []).map((a) => [a.id, a.display_name])
+    const authorIds = Array.from(
+      new Set((events || []).map((e) => e.author_user_id).filter(Boolean))
     );
 
-    const eventsWithAuthors = (events || []).map((event) => ({
-      id: event.id,
-      authorUserId: event.author_user_id,
-      authorName: authorsMap.get(event.author_user_id) || "Usuário desconhecido",
-      eventType: event.event_type,
-      body: event.body || "",
-      createdAt: event.created_at,
-    }));
+    let authorsMap = new Map<string, string>();
+
+    if (authorIds.length > 0) {
+      // Usar admin client para garantir acesso a todos os perfis
+      const admin = createAdminClient();
+      const { data: authors } = await admin
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", authorIds);
+
+      authorsMap = new Map(
+        (authors || []).map((a) => [a.id, a.display_name || "Usuário sem nome"])
+      );
+    }
+
+    const eventsWithAuthors = (events || []).map((event) => {
+      const authorName = event.author_user_id
+        ? authorsMap.get(event.author_user_id) || "Usuário desconhecido"
+        : "Sistema";
+
+      return {
+        id: event.id,
+        authorUserId: event.author_user_id,
+        authorName,
+        eventType: event.event_type,
+        body: event.body || "",
+        createdAt: event.created_at,
+      };
+    });
 
     return {
       ok: true,

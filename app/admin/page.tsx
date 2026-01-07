@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { getDemands } from "@/app/actions/demands";
 import DemandsTable from "@/components/admin/demands-table";
 import DemandsKanban from "@/components/admin/demands-kanban";
@@ -100,7 +96,11 @@ export default function AdminPage() {
     // Verificação periódica para capturar mudanças via router.push
     // (apenas quando não há modal aberto, para detectar quando alguém navega via URL)
     const interval = setInterval(() => {
-      if (!isModalOpen && typeof window !== "undefined" && !wasClosedManuallyRef.current) {
+      if (
+        !isModalOpen &&
+        typeof window !== "undefined" &&
+        !wasClosedManuallyRef.current
+      ) {
         const params = new URLSearchParams(window.location.search);
         const demandId = params.get("demandId");
         // Só verificar se há demandId na URL mas modal não está aberto
@@ -363,7 +363,7 @@ export default function AdminPage() {
 
       // Marcar como fechado manualmente imediatamente
       wasClosedManuallyRef.current = true;
-      
+
       // Fechar modal e limpar seleção
       setIsModalOpen(false);
       setSelectedDemand(null);
@@ -403,8 +403,8 @@ export default function AdminPage() {
   return (
     <div className="space-y-4">
       {/* Filtros */}
-      <DemandFilters 
-        filters={filters} 
+      <DemandFilters
+        filters={filters}
         onFiltersChange={setFilters}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
@@ -472,6 +472,9 @@ export default function AdminPage() {
               getDemandById={getDemandById}
               isDemandUpdating={isDemandUpdating}
               setDemandUpdating={setDemandUpdating}
+              onDemandCreated={() => {
+                loadDemands();
+              }}
             />
           ) : viewMode === "list" ? (
             <Card className="border-border/50">

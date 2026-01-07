@@ -4,8 +4,11 @@ import { useState } from "react";
 import { updateAdminStatus } from "@/app/actions/demands";
 import { toast } from "sonner";
 import DemandCard from "./demand-card";
+import CreateDemandModal from "./create-demand-modal";
 import type { Database } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 
 type Demand = Database["public"]["Tables"]["demands"]["Row"];
 
@@ -17,6 +20,7 @@ interface DemandsKanbanProps {
   getDemandById?: (id: string) => Demand | undefined;
   isDemandUpdating?: (id: string) => boolean;
   setDemandUpdating?: (id: string, isUpdating: boolean) => void;
+  onDemandCreated?: () => void;
 }
 
 const KANBAN_COLUMNS = [
@@ -34,9 +38,14 @@ export default function DemandsKanban({
   getDemandById,
   isDemandUpdating,
   setDemandUpdating,
+  onDemandCreated,
 }: DemandsKanbanProps) {
   const [draggedDemand, setDraggedDemand] = useState<Demand | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createModalStatus, setCreateModalStatus] = useState<
+    "Em análise" | "Acatada" | "Resolvida" | "Descartada"
+  >("Em análise");
 
   // Agrupar demandas por admin_status
   const demandsByStatus = demands.reduce((acc, demand) => {
@@ -155,9 +164,30 @@ export default function DemandsKanban({
               )}
             >
               <span>{column.label}</span>
-              <span className="bg-white/15 px-2 py-0.5 rounded-full text-[11px] ring-1 ring-white/25">
-                {columnDemands.length}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="bg-white/15 px-2 py-0.5 rounded-full text-[11px] ring-1 ring-white/25">
+                  {columnDemands.length}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-white hover:bg-white/20 hover:text-white rounded-full"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCreateModalStatus(
+                      column.id as
+                        | "Em análise"
+                        | "Acatada"
+                        | "Resolvida"
+                        | "Descartada"
+                    );
+                    setCreateModalOpen(true);
+                  }}
+                  title={`Adicionar demanda em ${column.label}`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
 
             {/* Área de drop */}
@@ -179,38 +209,89 @@ export default function DemandsKanban({
               ) : null}
 
               {columnDemands.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">
-                  Nenhuma demanda
+                <div className="flex flex-col items-center justify-center py-8 gap-4">
+                  <p className="text-center text-sm text-muted-foreground">
+                    Nenhuma demanda
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-dashed border-border/60 hover:border-primary/50 hover:bg-primary/5"
+                    onClick={() => {
+                      setCreateModalStatus(
+                        column.id as
+                          | "Em análise"
+                          | "Acatada"
+                          | "Resolvida"
+                          | "Descartada"
+                      );
+                      setCreateModalOpen(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Adicionar Demanda
+                  </Button>
                 </div>
               ) : (
-                columnDemands.map((demand) => (
-                  <div
-                    key={demand.id}
-                    draggable
-                    onDragStart={() => handleDragStart(demand)}
-                    onDragEnd={handleDragEnd}
-                    className={cn(
-                      "transition-opacity",
-                      draggedDemand?.id === demand.id && "opacity-50"
-                    )}
+                <>
+                  {columnDemands.map((demand) => (
+                    <div
+                      key={demand.id}
+                      draggable
+                      onDragStart={() => handleDragStart(demand)}
+                      onDragEnd={handleDragEnd}
+                      className={cn(
+                        "transition-opacity",
+                        draggedDemand?.id === demand.id && "opacity-50"
+                      )}
+                    >
+                      <DemandCard
+                        demand={demand}
+                        onClick={() => onDemandClick(demand)}
+                        className="cursor-grab active:cursor-grabbing"
+                        onDemandUpdate={onDemandUpdate}
+                        onDemandRollback={onDemandRollback}
+                        getDemandById={getDemandById}
+                        isDemandUpdating={isDemandUpdating}
+                        setDemandUpdating={setDemandUpdating}
+                      />
+                    </div>
+                  ))}
+                  {/* Botão adicionar ao final da lista */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-dashed border-border/60 hover:border-primary/50 hover:bg-primary/5"
+                    onClick={() => {
+                      setCreateModalStatus(
+                        column.id as
+                          | "Em análise"
+                          | "Acatada"
+                          | "Resolvida"
+                          | "Descartada"
+                      );
+                      setCreateModalOpen(true);
+                    }}
                   >
-                    <DemandCard
-                      demand={demand}
-                      onClick={() => onDemandClick(demand)}
-                      className="cursor-grab active:cursor-grabbing"
-                      onDemandUpdate={onDemandUpdate}
-                      onDemandRollback={onDemandRollback}
-                      getDemandById={getDemandById}
-                      isDemandUpdating={isDemandUpdating}
-                      setDemandUpdating={setDemandUpdating}
-                    />
-                  </div>
-                ))
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Adicionar Demanda
+                  </Button>
+                </>
               )}
             </div>
           </div>
         );
       })}
+
+      {/* Modal de criação de demanda */}
+      <CreateDemandModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        initialAdminStatus={createModalStatus}
+        onSuccess={() => {
+          onDemandCreated?.();
+        }}
+      />
     </div>
   );
 }

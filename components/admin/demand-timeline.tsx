@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getDemandEvents } from "@/app/actions/demands";
-import { Loader2, MessageSquare, Clock, UserCheck, Calendar } from "lucide-react";
+import {
+  Loader2,
+  MessageSquare,
+  Clock,
+  UserCheck,
+  Calendar,
+  MapPinPlus,
+} from "lucide-react";
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   return new Intl.DateTimeFormat("pt-BR", {
@@ -25,6 +32,7 @@ interface TimelineEvent {
 
 interface DemandTimelineProps {
   demandId: string;
+  refreshKey?: number;
 }
 
 const getEventIcon = (eventType: string) => {
@@ -37,6 +45,8 @@ const getEventIcon = (eventType: string) => {
       return UserCheck;
     case "deadline_change":
       return Calendar;
+    case "created":
+      return MapPinPlus;
     default:
       return MessageSquare;
   }
@@ -52,20 +62,21 @@ const getEventLabel = (eventType: string) => {
       return "Atribuição";
     case "deadline_change":
       return "Prazo";
+    case "created":
+      return "Criação";
     default:
       return "Evento";
   }
 };
 
-export default function DemandTimeline({ demandId }: DemandTimelineProps) {
+export default function DemandTimeline({
+  demandId,
+  refreshKey,
+}: DemandTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadEvents();
-  }, [demandId]);
-
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     setLoading(true);
     try {
       const result = await getDemandEvents(demandId);
@@ -77,7 +88,11 @@ export default function DemandTimeline({ demandId }: DemandTimelineProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [demandId]);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents, refreshKey]);
 
   if (loading) {
     return (
@@ -136,4 +151,3 @@ export default function DemandTimeline({ demandId }: DemandTimelineProps) {
     </div>
   );
 }
-
