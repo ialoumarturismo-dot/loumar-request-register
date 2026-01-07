@@ -77,7 +77,8 @@ export async function sendTemplateMessage(
       to: normalizedPhone,
       from: channelFrom,
       templateId: params.templateId,
-      hasVariables: !!params.variables && Object.keys(params.variables).length > 0,
+      hasVariables:
+        !!params.variables && Object.keys(params.variables).length > 0,
       hasLink: !!params.linkUrl,
       payload: JSON.stringify(payload, null, 2),
     });
@@ -101,16 +102,19 @@ export async function sendTemplateMessage(
       } catch {
         errorData = { message: errorText || `HTTP ${response.status}` };
       }
-      
+
       console.error("[flwchat] Error response:", {
         status: response.status,
         statusText: response.statusText,
         error: errorData,
       });
-      
+
       return {
         ok: false,
-        error: errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`,
+        error:
+          errorData.message ||
+          errorData.error ||
+          `HTTP ${response.status}: ${response.statusText}`,
       };
     }
 
@@ -136,7 +140,7 @@ export async function sendTemplateMessage(
 
     // Extract message ID from response
     const messageId = data.id || data.status || "unknown";
-    
+
     console.log("[flwchat] Message sent successfully:", {
       messageId,
       response: data,
@@ -150,7 +154,10 @@ export async function sendTemplateMessage(
     console.error("[flwchat] Send message error:", err);
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Erro desconhecido ao enviar mensagem",
+      error:
+        err instanceof Error
+          ? err.message
+          : "Erro desconhecido ao enviar mensagem",
     };
   }
 }
@@ -170,4 +177,3 @@ export function generateDedupeKey(
   }
   return parts.join(":");
 }
-

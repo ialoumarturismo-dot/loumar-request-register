@@ -83,7 +83,7 @@ export async function sendDemandCreatedNotification(
     // Get user profile
     const { data: profile, error: profileError } = await admin
       .from("profiles")
-      .select("whatsapp_phone, whatsapp_opt_in")
+      .select("whatsapp_phone, whatsapp_opt_in, notify_demand_created")
       .eq("id", userId)
       .single();
 
@@ -106,6 +106,12 @@ export async function sendDemandCreatedNotification(
         hasPhone: !!profile?.whatsapp_phone,
       });
       return; // User opted out or no phone
+    }
+
+    // Verificar preferência específica para este tipo de notificação
+    if (profile.notify_demand_created === false) {
+      console.log("[notifications] Notificação não enviada - preferência desativada para demand_created");
+      return;
     }
 
     // Get demand details
@@ -186,11 +192,16 @@ export async function sendDemandAssignedNotification(
 
     const { data: profile } = await admin
       .from("profiles")
-      .select("whatsapp_phone, whatsapp_opt_in")
+      .select("whatsapp_phone, whatsapp_opt_in, notify_demand_assigned")
       .eq("id", userId)
       .single();
 
     if (!profile || !profile.whatsapp_opt_in || !profile.whatsapp_phone) {
+      return;
+    }
+
+    // Verificar preferência específica para este tipo de notificação
+    if (profile.notify_demand_assigned === false) {
       return;
     }
 
@@ -268,11 +279,16 @@ export async function sendManagerCommentNotification(
 
     const { data: profile } = await admin
       .from("profiles")
-      .select("whatsapp_phone, whatsapp_opt_in")
+      .select("whatsapp_phone, whatsapp_opt_in, notify_manager_comment")
       .eq("id", userId)
       .single();
 
     if (!profile || !profile.whatsapp_opt_in || !profile.whatsapp_phone) {
+      return;
+    }
+
+    // Verificar preferência específica para este tipo de notificação
+    if (profile.notify_manager_comment === false) {
       return;
     }
 
@@ -349,11 +365,16 @@ export async function sendDeadlineSoonNotification(
 
     const { data: profile } = await admin
       .from("profiles")
-      .select("whatsapp_phone, whatsapp_opt_in")
+      .select("whatsapp_phone, whatsapp_opt_in, notify_deadline_soon")
       .eq("id", userId)
       .single();
 
     if (!profile || !profile.whatsapp_opt_in || !profile.whatsapp_phone) {
+      return;
+    }
+
+    // Verificar preferência específica para este tipo de notificação
+    if (profile.notify_deadline_soon === false) {
       return;
     }
 

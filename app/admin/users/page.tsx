@@ -25,6 +25,10 @@ interface UserData {
   whatsappPhone: string | null;
   whatsappOptIn: boolean;
   departments: string[];
+  notifyDemandCreated?: boolean;
+  notifyDemandAssigned?: boolean;
+  notifyManagerComment?: boolean;
+  notifyDeadlineSoon?: boolean;
 }
 
 export default function UsersPage() {

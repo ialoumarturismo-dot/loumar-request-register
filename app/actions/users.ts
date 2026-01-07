@@ -17,6 +17,10 @@ const createUserSchema = z
     departments: z.array(departmentNameSchema).default([]),
     whatsappPhone: z.string().optional(),
     whatsappOptIn: z.boolean().default(false),
+    notifyDemandCreated: z.boolean().default(true),
+    notifyDemandAssigned: z.boolean().default(true),
+    notifyManagerComment: z.boolean().default(true),
+    notifyDeadlineSoon: z.boolean().default(true),
   })
   .superRefine((data, ctx) => {
     if (data.role === "sector_user" && data.departments.length === 0) {
@@ -37,6 +41,10 @@ const updateUserSchema = z
     departments: z.array(departmentNameSchema).optional(),
     whatsappPhone: z.string().optional(),
     whatsappOptIn: z.boolean().optional(),
+    notifyDemandCreated: z.boolean().optional(),
+    notifyDemandAssigned: z.boolean().optional(),
+    notifyManagerComment: z.boolean().optional(),
+    notifyDeadlineSoon: z.boolean().optional(),
     password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres").optional(),
   })
   .superRefine((data, ctx) => {
@@ -190,6 +198,10 @@ export async function createManagedUser(
     const departmentsJson = formData.get("departments") as string;
     const whatsappPhone = formData.get("whatsappPhone") as string | null;
     const whatsappOptIn = formData.get("whatsappOptIn") === "true";
+    const notifyDemandCreated = formData.get("notifyDemandCreated") === "true";
+    const notifyDemandAssigned = formData.get("notifyDemandAssigned") === "true";
+    const notifyManagerComment = formData.get("notifyManagerComment") === "true";
+    const notifyDeadlineSoon = formData.get("notifyDeadlineSoon") === "true";
 
     let departments: string[] = [];
     if (departmentsJson) {
@@ -212,6 +224,10 @@ export async function createManagedUser(
       departments,
       whatsappPhone: whatsappPhone || undefined,
       whatsappOptIn,
+      notifyDemandCreated,
+      notifyDemandAssigned,
+      notifyManagerComment,
+      notifyDeadlineSoon,
     });
 
     if (!validation.success) {
@@ -256,6 +272,10 @@ export async function createManagedUser(
         role: validation.data.role,
         whatsapp_phone: validation.data.whatsappPhone || null,
         whatsapp_opt_in: validation.data.whatsappOptIn,
+        notify_demand_created: validation.data.notifyDemandCreated,
+        notify_demand_assigned: validation.data.notifyDemandAssigned,
+        notify_manager_comment: validation.data.notifyManagerComment,
+        notify_deadline_soon: validation.data.notifyDeadlineSoon,
       });
 
       if (profileError) {
@@ -376,6 +396,10 @@ export async function updateManagedUser(
     const departmentsJson = formData.get("departments") as string | null;
     const whatsappPhone = formData.get("whatsappPhone") as string | null;
     const whatsappOptIn = formData.get("whatsappOptIn") === "true";
+    const notifyDemandCreated = formData.get("notifyDemandCreated") === "true";
+    const notifyDemandAssigned = formData.get("notifyDemandAssigned") === "true";
+    const notifyManagerComment = formData.get("notifyManagerComment") === "true";
+    const notifyDeadlineSoon = formData.get("notifyDeadlineSoon") === "true";
     const password = formData.get("password") as string | null;
 
     let departments: string[] | undefined;
@@ -398,6 +422,10 @@ export async function updateManagedUser(
       departments,
       whatsappPhone: whatsappPhone || undefined,
       whatsappOptIn,
+      notifyDemandCreated,
+      notifyDemandAssigned,
+      notifyManagerComment,
+      notifyDeadlineSoon,
       password: password || undefined,
     });
 
@@ -436,6 +464,10 @@ export async function updateManagedUser(
       role?: string;
       whatsapp_phone?: string | null;
       whatsapp_opt_in?: boolean;
+      notify_demand_created?: boolean;
+      notify_demand_assigned?: boolean;
+      notify_manager_comment?: boolean;
+      notify_deadline_soon?: boolean;
       updated_at?: string;
     } = {
       updated_at: new Date().toISOString(),
@@ -452,6 +484,18 @@ export async function updateManagedUser(
     }
     if (validation.data.whatsappOptIn !== undefined) {
       profileUpdate.whatsapp_opt_in = validation.data.whatsappOptIn;
+    }
+    if (validation.data.notifyDemandCreated !== undefined) {
+      profileUpdate.notify_demand_created = validation.data.notifyDemandCreated;
+    }
+    if (validation.data.notifyDemandAssigned !== undefined) {
+      profileUpdate.notify_demand_assigned = validation.data.notifyDemandAssigned;
+    }
+    if (validation.data.notifyManagerComment !== undefined) {
+      profileUpdate.notify_manager_comment = validation.data.notifyManagerComment;
+    }
+    if (validation.data.notifyDeadlineSoon !== undefined) {
+      profileUpdate.notify_deadline_soon = validation.data.notifyDeadlineSoon;
     }
 
     if (Object.keys(profileUpdate).length > 1) {
@@ -621,7 +665,7 @@ export async function listManagedUsers(): Promise<
     // Buscar todos os perfis
     const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
-      .select("id, display_name, role, whatsapp_phone, whatsapp_opt_in")
+      .select("id, display_name, role, whatsapp_phone, whatsapp_opt_in, notify_demand_created, notify_demand_assigned, notify_manager_comment, notify_deadline_soon")
       .order("created_at", { ascending: false });
 
     if (profilesError) {
@@ -653,6 +697,10 @@ export async function listManagedUsers(): Promise<
           whatsappPhone: profile.whatsapp_phone,
           whatsappOptIn: profile.whatsapp_opt_in,
           departments: departments?.map((d) => d.department) || [],
+          notifyDemandCreated: profile.notify_demand_created ?? true,
+          notifyDemandAssigned: profile.notify_demand_assigned ?? true,
+          notifyManagerComment: profile.notify_manager_comment ?? true,
+          notifyDeadlineSoon: profile.notify_deadline_soon ?? true,
         };
       })
     );

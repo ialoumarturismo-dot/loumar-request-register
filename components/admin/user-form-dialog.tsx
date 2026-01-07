@@ -29,7 +29,15 @@ import {
   Check,
   Trash2,
   Plus,
+  Bell,
 } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Switch } from "@/components/ui/switch";
 import { createManagedUser, updateManagedUser } from "@/app/actions/users";
 import {
   listDepartments,
@@ -47,6 +55,10 @@ interface UserData {
   whatsappPhone: string | null;
   whatsappOptIn: boolean;
   departments: string[];
+  notifyDemandCreated?: boolean;
+  notifyDemandAssigned?: boolean;
+  notifyManagerComment?: boolean;
+  notifyDeadlineSoon?: boolean;
 }
 
 interface UserFormDialogProps {
@@ -72,6 +84,10 @@ export default function UserFormDialog({
   const [departments, setDepartments] = useState<string[]>([]);
   const [whatsappPhone, setWhatsappPhone] = useState("");
   const [whatsappOptIn, setWhatsappOptIn] = useState(false);
+  const [notifyDemandCreated, setNotifyDemandCreated] = useState(true);
+  const [notifyDemandAssigned, setNotifyDemandAssigned] = useState(true);
+  const [notifyManagerComment, setNotifyManagerComment] = useState(true);
+  const [notifyDeadlineSoon, setNotifyDeadlineSoon] = useState(true);
 
   // Estados para edição inline de setores
   const [isEditingDepartments, setIsEditingDepartments] = useState(false);
@@ -95,6 +111,10 @@ export default function UserFormDialog({
         setDepartments([...editingUser.departments]);
         setWhatsappPhone(editingUser.whatsappPhone || "");
         setWhatsappOptIn(editingUser.whatsappOptIn);
+        setNotifyDemandCreated(editingUser.notifyDemandCreated ?? true);
+        setNotifyDemandAssigned(editingUser.notifyDemandAssigned ?? true);
+        setNotifyManagerComment(editingUser.notifyManagerComment ?? true);
+        setNotifyDeadlineSoon(editingUser.notifyDeadlineSoon ?? true);
       } else {
         resetForm();
       }
@@ -110,6 +130,10 @@ export default function UserFormDialog({
     setDepartments([]);
     setWhatsappPhone("");
     setWhatsappOptIn(false);
+    setNotifyDemandCreated(true);
+    setNotifyDemandAssigned(true);
+    setNotifyManagerComment(true);
+    setNotifyDeadlineSoon(true);
   };
 
   const loadDepartments = async () => {
@@ -204,6 +228,16 @@ export default function UserFormDialog({
         }
         if (whatsappPhone) formData.append("whatsappPhone", whatsappPhone);
         formData.append("whatsappOptIn", whatsappOptIn.toString());
+        formData.append("notifyDemandCreated", notifyDemandCreated.toString());
+        formData.append(
+          "notifyDemandAssigned",
+          notifyDemandAssigned.toString()
+        );
+        formData.append(
+          "notifyManagerComment",
+          notifyManagerComment.toString()
+        );
+        formData.append("notifyDeadlineSoon", notifyDeadlineSoon.toString());
         if (password) formData.append("password", password);
 
         const result = await updateManagedUser(formData);
@@ -224,6 +258,16 @@ export default function UserFormDialog({
         formData.append("departments", JSON.stringify(departments));
         if (whatsappPhone) formData.append("whatsappPhone", whatsappPhone);
         formData.append("whatsappOptIn", whatsappOptIn.toString());
+        formData.append("notifyDemandCreated", notifyDemandCreated.toString());
+        formData.append(
+          "notifyDemandAssigned",
+          notifyDemandAssigned.toString()
+        );
+        formData.append(
+          "notifyManagerComment",
+          notifyManagerComment.toString()
+        );
+        formData.append("notifyDeadlineSoon", notifyDeadlineSoon.toString());
 
         const result = await createManagedUser(formData);
         if (result.ok) {
@@ -493,6 +537,105 @@ export default function UserFormDialog({
               Receber notificações via WhatsApp
             </Label>
           </div>
+
+          {whatsappOptIn && (
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="notifications">
+                <AccordionTrigger className="text-sm">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4" />
+                    <span>Preferências de Notificação</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label
+                          htmlFor="notify-demand-created"
+                          className="text-sm font-normal"
+                        >
+                          Notificar quando demanda é criada
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Receber notificação quando uma nova demanda é criada
+                        </p>
+                      </div>
+                      <Switch
+                        id="notify-demand-created"
+                        checked={notifyDemandCreated}
+                        onCheckedChange={setNotifyDemandCreated}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label
+                          htmlFor="notify-demand-assigned"
+                          className="text-sm font-normal"
+                        >
+                          Notificar quando demanda é atribuída
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Receber notificação quando uma demanda é atribuída a
+                          você
+                        </p>
+                      </div>
+                      <Switch
+                        id="notify-demand-assigned"
+                        checked={notifyDemandAssigned}
+                        onCheckedChange={setNotifyDemandAssigned}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label
+                          htmlFor="notify-manager-comment"
+                          className="text-sm font-normal"
+                        >
+                          Notificar quando gestor comenta
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Receber notificação quando um gestor adiciona um
+                          comentário
+                        </p>
+                      </div>
+                      <Switch
+                        id="notify-manager-comment"
+                        checked={notifyManagerComment}
+                        onCheckedChange={setNotifyManagerComment}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label
+                          htmlFor="notify-deadline-soon"
+                          className="text-sm font-normal"
+                        >
+                          Notificar quando prazo está próximo
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Receber notificação quando o prazo de uma demanda está
+                          próximo
+                        </p>
+                      </div>
+                      <Switch
+                        id="notify-deadline-soon"
+                        checked={notifyDeadlineSoon}
+                        onCheckedChange={setNotifyDeadlineSoon}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          )}
 
           <DialogFooter>
             <Button

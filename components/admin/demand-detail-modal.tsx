@@ -41,6 +41,10 @@ import {
   Loader2,
   X,
   MessageSquare,
+  Waypoints,
+  ClockCheck,
+  Settings,
+  Link2,
 } from "lucide-react";
 import ViewAttachment from "./view-attachment";
 import ViewReferenceLinks from "./view-reference-links";
@@ -270,8 +274,9 @@ export default function DemandDetailModal({
           {/* Informações principais (2 col, pares definidos) */}
           <section className="rounded-lg border border-border/40 bg-muted/30 p-3">
             <div className="flex items-center justify-between gap-3 mb-2">
-              <h3 className="text-[11px] font-medium text-muted-foreground tracking-wide shrink-0">
-                Metadados
+              <h3 className="text-[11px] font-medium text-muted-foreground tracking-wide shrink-0 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                Informações
               </h3>
               <div className="shrink-0 min-w-fit">
                 <PrioritySelect
@@ -370,7 +375,8 @@ export default function DemandDetailModal({
 
           {/* Descrição */}
           <section className="rounded-lg border border-border/40 bg-muted/30 p-3">
-            <div className="text-[11px] font-medium text-muted-foreground mb-2 tracking-wide">
+            <div className="text-[11px] font-medium text-muted-foreground mb-2 tracking-wide flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
               Descrição
             </div>
             <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">
@@ -384,7 +390,8 @@ export default function DemandDetailModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {demand.attachment_urls && demand.attachment_urls.length > 0 ? (
                 <section className="rounded-lg border border-border/40 bg-muted/30 p-3">
-                  <div className="text-[11px] font-medium text-muted-foreground mb-2 tracking-wide">
+                  <div className="text-[11px] font-medium text-muted-foreground mb-2 tracking-wide flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
                     Anexos
                   </div>
                   <ViewAttachment
@@ -396,7 +403,8 @@ export default function DemandDetailModal({
 
               {demand.reference_links && demand.reference_links.length > 0 ? (
                 <section className="rounded-lg border border-border/40 bg-muted/30 p-3">
-                  <div className="text-[11px] font-medium text-muted-foreground mb-2 tracking-wide">
+                  <div className="text-[11px] font-medium text-muted-foreground mb-2 tracking-wide flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-muted-foreground" />
                     Links
                   </div>
                   <ViewReferenceLinks
@@ -412,7 +420,7 @@ export default function DemandDetailModal({
           {userRole === "admin" && (
             <section className="rounded-lg border border-border/40 bg-muted/30 p-3">
               <div className="text-[11px] font-medium text-muted-foreground mb-2 flex items-center gap-2 tracking-wide">
-                <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                <Settings className="h-4 w-4 text-muted-foreground" />
                 Gestão administrativa
               </div>
 
@@ -526,7 +534,7 @@ export default function DemandDetailModal({
           {/* Timeline (admin e sector_user veem comentários) */}
           <section className="rounded-lg border border-border/40 bg-muted/30 p-3">
             <div className="text-[11px] font-medium text-muted-foreground mb-3 flex items-center gap-2 tracking-wide">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              <Waypoints className="h-4 w-4 text-muted-foreground" />
               Timeline de Atualizações
             </div>
             <DemandTimeline demandId={demand.id} />
@@ -584,7 +592,7 @@ export default function DemandDetailModal({
           {userRole === "admin" && (
             <section className="rounded-lg border border-border/40 bg-muted/30 p-3">
               <div className="text-[11px] font-medium text-muted-foreground mb-2 flex items-center gap-2 tracking-wide">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <ClockCheck className="h-4 w-4 text-muted-foreground" />
                 Prazo de Conclusão
               </div>
               <div className="space-y-2">
