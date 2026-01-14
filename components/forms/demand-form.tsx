@@ -12,7 +12,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -118,17 +120,36 @@ export default function DemandForm() {
   const [departments, setDepartments] = useState<
     Array<{ id: string; name: string }>
   >([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(true);
+  const [departmentsLoadError, setDepartmentsLoadError] = useState<
+    string | null
+  >(null);
 
   // Carregar setores do banco de dados
   useEffect(() => {
     const loadDepartmentsData = async () => {
       try {
+        setDepartmentsLoading(true);
+        setDepartmentsLoadError(null);
         const result = await listDepartments();
         if (result.ok) {
           setDepartments(result.data);
+        } else {
+          setDepartments([]);
+          setDepartmentsLoadError(result.error);
+          toast.error("Não foi possível carregar os setores", {
+            description: result.error,
+          });
         }
       } catch (error) {
         console.error("Load departments error:", error);
+        setDepartments([]);
+        setDepartmentsLoadError("Erro inesperado ao carregar setores");
+        toast.error("Não foi possível carregar os setores", {
+          description: "Erro inesperado ao carregar setores",
+        });
+      } finally {
+        setDepartmentsLoading(false);
       }
     };
     loadDepartmentsData();
@@ -468,17 +489,27 @@ export default function DemandForm() {
                 value as DemandFormValues["department"]
               )
             }
-            disabled={isPending}
+            disabled={isPending || departmentsLoading || !!departmentsLoadError}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Informe seu setor" />
+              <SelectValue placeholder="Selecione seu setor" />
             </SelectTrigger>
             <SelectContent>
-              {departments.map((dep) => (
-                <SelectItem key={dep.id} value={dep.name}>
-                  {dep.name}
-                </SelectItem>
-              ))}
+              {departments.length === 0 ? (
+                <SelectGroup>
+                  <SelectLabel className="text-muted-foreground">
+                    {departmentsLoading
+                      ? "Carregando setores..."
+                      : "Nenhum setor disponível"}
+                  </SelectLabel>
+                </SelectGroup>
+              ) : (
+                departments.map((dep) => (
+                  <SelectItem key={dep.id} value={dep.name}>
+                    {dep.name}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
           {form.formState.errors.department && (
@@ -539,7 +570,7 @@ export default function DemandForm() {
             disabled={isPending}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Informe a área afetada" />
+              <SelectValue placeholder="Selecione a área afetada" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="erp-sistemao">ERP (Sistemão)</SelectItem>
@@ -603,17 +634,27 @@ export default function DemandForm() {
                 value as DemandFormValues["destination_department"]
               )
             }
-            disabled={isPending}
+            disabled={isPending || departmentsLoading || !!departmentsLoadError}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Informe o setor que receberá sua solicitação" />
+              <SelectValue placeholder="Selecione o setor que receberá sua solicitação" />
             </SelectTrigger>
             <SelectContent>
-              {departments.map((dep) => (
-                <SelectItem key={dep.id} value={dep.name}>
-                  {dep.name}
-                </SelectItem>
-              ))}
+              {departments.length === 0 ? (
+                <SelectGroup>
+                  <SelectLabel className="text-muted-foreground">
+                    {departmentsLoading
+                      ? "Carregando setores..."
+                      : "Nenhum setor disponível"}
+                  </SelectLabel>
+                </SelectGroup>
+              ) : (
+                departments.map((dep) => (
+                  <SelectItem key={dep.id} value={dep.name}>
+                    {dep.name}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
           <p className="text-sm text-muted-foreground/70">

@@ -16,7 +16,7 @@ const updateDepartmentSchema = z.object({
 
 /**
  * Server Action: Listar todos os setores
- * Permite acesso para usuários autenticados (para uso no formulário de demandas)
+ * Permite acesso para usuários anônimos e autenticados (para uso no formulário de demandas)
  */
 export async function listDepartments(): Promise<
   | {
@@ -27,19 +27,6 @@ export async function listDepartments(): Promise<
 > {
   try {
     const supabase = await createClient();
-
-    // Verificar se usuário está autenticado
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return {
-        ok: false,
-        error: "Não autenticado",
-      };
-    }
 
     const { data: departments, error } = await supabase
       .from("departments")
@@ -316,4 +303,3 @@ export async function deleteDepartment(
     };
   }
 }
-

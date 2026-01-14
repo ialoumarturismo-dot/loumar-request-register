@@ -547,3 +547,19 @@ GRANT EXECUTE ON FUNCTION public.add_demand_comment(UUID, TEXT) TO authenticated
 COMMENT ON FUNCTION public.set_demand_status IS 'Permite usuários de setor atualizarem status operacional de demandas atribuídas a eles';
 COMMENT ON FUNCTION public.add_demand_comment IS 'Permite usuários de setor adicionarem comentários (manager_only) em demandas atribuídas a eles';
 
+-- ============================================================================
+-- MIGRATION: Allow anyone to read departments for the demand form
+-- ============================================================================
+-- Arquivo: 20260114000000_allow_read_departments.sql
+-- Permite que usuários anônimos e autenticados leiam a tabela departments
+-- para que possam selecionar setores no formulário de demandas
+
+-- Drop policy if it already exists (for idempotency)
+DROP POLICY IF EXISTS "Anyone can read departments" ON public.departments;
+
+CREATE POLICY "Anyone can read departments"
+ON public.departments
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
